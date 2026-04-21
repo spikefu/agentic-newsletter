@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newsletter Agent</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --surface2: #1c2128;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #7d8590;
+    --accent:   #58a6ff;
+    --green:    #7ee787;
+    --orange:   #f0883e;
+    --yellow:   #e3b341;
+    --purple:   #bc8cff;
+    --red:      #f85149;
+    --cyan:     #67e8f9;
+    --amber:    #fb923c;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+  .header-sub   { font-size: 0.75rem; color: var(--muted); }
+  #liveCost     { font-size: 0.78rem; color: var(--yellow); font-family: monospace; display: none; }
+
+  /* ── Main layout ── */
+  main { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 0.6rem 1rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .card-header .badge {
+    font-size: 0.68rem; padding: 0.15rem 0.5rem; border-radius: 10px;
+    background: rgba(88,166,255,0.12); color: var(--accent);
+    border: 1px solid rgba(88,166,255,0.25);
+    font-weight: 700; letter-spacing: 0.03em; text-transform: none;
+  }
+
+  /* ── Prompt editor ── */
+  .guide-intro {
+    padding: 0.75rem 1rem 0.625rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 1.5rem;
+  }
+  .guide-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    flex: 1;
+  }
+  .guide-step-num {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--amber);
+    background: rgba(251,146,60,0.12);
+    border: 1px solid rgba(251,146,60,0.3);
+    border-radius: 3px;
+    padding: 0.15rem 0.35rem;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    margin-top: 0.05rem;
+  }
+  .guide-step-text { font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+  .guide-step-text strong { color: var(--text); font-weight: 600; }
+
+  .prompt-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .prompt-pane { display: flex; flex-direction: column; }
+  .prompt-pane:first-child { border-right: 1px solid var(--border); }
+  .prompt-label {
+    padding: 0.5rem 1rem 0.35rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .prompt-label-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.2rem;
+  }
+  .prompt-label-sub {
+    font-size: 0.67rem;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .prompt-examples {
+    padding: 0.4rem 1rem 0.5rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+  }
+  .prompt-ex-label { font-size: 0.62rem; color: var(--muted); margin-right: 0.1rem; }
+  .ex-chip {
+    font-size: 0.67rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    font-family: inherit;
+  }
+  .ex-chip:hover { border-color: var(--accent); color: var(--accent); }
+  textarea {
+    width: 100%;
+    min-height: 200px;
+    background: var(--bg);
+    color: var(--text);
+    border: none;
+    outline: none;
+    resize: vertical;
+    padding: 0.75rem 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.65;
+  }
+  textarea::placeholder { color: var(--muted); opacity: 0.5; font-style: italic; }
+  .prompt-actions {
+    padding: 0.75rem 1rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.5rem 1.1rem;
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.82rem; font-weight: 600;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--accent); color: #0d1117; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+  .btn.loading::after {
+    content: ''; width: 12px; height: 12px;
+    border: 2px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Phase banners ── */
+  .phase-banner {
+    display: none; padding: 0.5rem 1rem; border-radius: 6px;
+    font-size: 0.82rem; font-weight: 600;
+    border: 1px solid transparent; align-items: center; gap: 0.5rem;
+  }
+  .phase-banner.active { display: flex; }
+  .phase-banner.p1 { background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.2); color: var(--accent); }
+  .phase-banner.p2 { background: rgba(126,231,135,0.08); border-color: rgba(126,231,135,0.2); color: var(--green); }
+
+  /* ── Activity log ── */
+  .feed-log {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    font-size: 0.75rem;
+  }
+  .log-row {
+    display: flex; gap: 0.6rem;
+    padding: 0.25rem 0.4rem;
+    border-radius: 4px;
+    animation: fadeUp 0.2s ease;
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(3px); } }
+  .log-row:hover { background: var(--surface2); }
+  .log-t   { color: var(--muted); opacity: 0.5; flex-shrink: 0; }
+  .log-ic  { flex-shrink: 0; }
+  .log-msg { flex: 1; word-break: break-word; }
+
+  .log-row.status     .log-msg { color: var(--muted); }
+  .log-row.thinking   .log-msg { color: var(--purple); font-style: italic; }
+  .log-row.agent_text .log-msg { color: var(--text); }
+  .log-row.tool_call  .log-msg { color: var(--orange); }
+  .log-row.tool_result .log-msg { color: var(--green); }
+  .log-row.phase      .log-msg { color: var(--accent); font-weight: 700; }
+  .log-row.progress   .log-msg { color: var(--cyan); white-space: pre; font-size: 0.72em; }
+  .log-row.step_cost  .log-msg { color: var(--yellow); }
+  .log-row.done       .log-msg { color: var(--green); font-weight: 700; }
+  .log-row.error      .log-msg { color: var(--red); }
+
+  .log-row.prompt     { align-items: flex-start; }
+  .log-row.prompt .log-msg { width: 100%; }
+  .prompt-details summary {
+    cursor: pointer; color: var(--accent); font-weight: 600;
+    list-style: none; display: inline-flex; align-items: center; gap: 0.4rem;
+  }
+  .prompt-details summary::-webkit-details-marker { display: none; }
+  .prompt-body { margin-top: 0.4rem; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; font-size: 0.72rem; }
+  .prompt-msg  { border-bottom: 1px solid var(--border); padding: 0.3rem 0.5rem; }
+  .prompt-msg:last-child { border-bottom: none; }
+  .prompt-role { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 0.15rem; }
+  .prompt-role.system    { color: var(--yellow); }
+  .prompt-role.user      { color: var(--accent); }
+  .prompt-role.assistant { color: var(--green); }
+  .prompt-role.tool      { color: var(--orange); }
+  .prompt-content {
+    white-space: pre-wrap; word-break: break-word;
+    color: var(--muted); max-height: 180px; overflow-y: auto;
+  }
+
+  /* ── Chrome tabs panel ── */
+  .tabs-list {
+    padding: 0.625rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .tab-row {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+  }
+  .tab-row:last-child { border-bottom: none; }
+  .tab-favicon {
+    width: 14px; height: 14px; flex-shrink: 0;
+    opacity: 0.6; object-fit: contain;
+  }
+  .tab-title {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--text);
+  }
+  .tab-url {
+    font-size: 0.68rem; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 40%;
+    flex-shrink: 0;
+  }
+  .tabs-empty { padding: 1rem; color: var(--muted); font-size: 0.82rem; }
+  .tabs-error { padding: 0.75rem 1rem; color: var(--red); font-size: 0.78rem; }
+
+  /* ── Clusters panel ── */
+  .clusters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .cluster-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+  }
+  .cluster-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.3rem; color: var(--accent); }
+  .cluster-theme { font-size: 0.75rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.5rem; }
+  .cluster-meta  { font-size: 0.68rem; color: var(--muted); opacity: 0.7; }
+  .cluster-sources { list-style: none; margin-top: 0.4rem; }
+  .cluster-sources li {
+    font-size: 0.72rem; padding: 0.15rem 0;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cluster-sources a { color: var(--accent); text-decoration: none; }
+  .cluster-sources a:hover { text-decoration: underline; }
+
+  /* ── Newsletter output ── */
+  #newsletterWrap { display: none; }
+
+  .nl-card {
+    background: #fff;
+    color: #1a1a1a;
+    border-radius: 10px;
+    overflow: hidden;
+    max-width: 780px;
+    margin: 0 auto;
+    font-family: Georgia, 'Times New Roman', serif;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  .nl-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    padding: 2.5rem 2.5rem 2rem;
+    border-bottom: 4px solid var(--amber);
+  }
+  .nl-eyebrow {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--amber);
+    margin-bottom: 0.75rem;
+  }
+  .nl-title {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+    font-family: Georgia, serif;
+  }
+  .nl-dateline {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .nl-intro {
+    padding: 1.75rem 2.5rem 1.25rem;
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: #2d2d2d;
+    border-bottom: 1px solid #e8e8e8;
+  }
+  .nl-intro p { margin-bottom: 0.75rem; }
+  .nl-intro p:last-child { margin-bottom: 0; }
+  .nl-intro a { color: #1a56db; }
+
+  .nl-section {
+    padding: 1.75rem 2.5rem;
+    border-bottom: 1px solid #e8e8e8;
+  }
+  .nl-section:last-of-type { border-bottom: none; }
+
+  .nl-section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .nl-section-num {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--amber);
+    background: rgba(251,146,60,0.12);
+    border: 1px solid rgba(251,146,60,0.3);
+    border-radius: 4px;
+    padding: 0.2rem 0.45rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    margin-top: 0.35rem;
+  }
+  .nl-headline {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #111;
+    font-family: Georgia, serif;
+  }
+
+  .nl-body {
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: #333;
+  }
+  .nl-body p { margin-bottom: 1rem; }
+  .nl-body p:last-child { margin-bottom: 0; }
+  .nl-body a { color: #1a56db; text-decoration: underline; text-underline-offset: 2px; }
+  .nl-body a:hover { color: #1e40af; }
+  .nl-body strong { color: #111; font-weight: 700; }
+  .nl-body ul { margin: 0.75rem 0 1rem 1.25rem; }
+  .nl-body li { margin-bottom: 0.4rem; }
+
+  .nl-links {
+    margin-top: 1.25rem;
+    padding: 0.875rem 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid var(--amber);
+  }
+  .nl-links-label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    margin-bottom: 0.5rem;
+  }
+  .nl-links ul { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+  .nl-links li { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 0.82rem; }
+  .nl-links a { color: #1a56db; text-decoration: none; }
+  .nl-links a:hover { text-decoration: underline; }
+  .nl-links a::before { content: '→ '; color: var(--amber); font-weight: 700; }
+  .nl-link-date { font-size: 0.72rem; color: #888; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  .nl-closing {
+    padding: 1.5rem 2.5rem 2rem;
+    font-size: 0.92rem;
+    line-height: 1.75;
+    color: #555;
+    background: #f8f9fa;
+    border-top: 1px solid #e8e8e8;
+    font-style: italic;
+  }
+  .nl-closing p { margin-bottom: 0.75rem; }
+  .nl-closing p:last-child { margin-bottom: 0; }
+
+  /* ── Download buttons ── */
+  .download-btns { display: flex; }
+
+  /* ── Elicitor modal ── */
+  .elicitor-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(3px);
+    animation: fadeIn 0.15s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } }
+  .elicitor-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: min(620px, 94vw);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    overflow: hidden;
+    animation: slideUp 0.18s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(12px); opacity: 0; } }
+  .elicitor-header {
+    padding: 1.25rem 1.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .elicitor-eyebrow {
+    font-size: 0.6rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--amber); margin-bottom: 0.4rem;
+  }
+  .elicitor-title {
+    font-size: 1.05rem; font-weight: 700; color: var(--text);
+    margin-bottom: 0.3rem; line-height: 1.3;
+  }
+  .elicitor-suggestion {
+    font-size: 0.78rem; color: var(--muted); line-height: 1.5;
+  }
+  .elicitor-body { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+  .elicitor-q { display: flex; flex-direction: column; gap: 0.35rem; }
+  .elicitor-q-label {
+    font-size: 0.82rem; font-weight: 600; color: var(--text); line-height: 1.45;
+  }
+  .elicitor-q-label::before {
+    content: '▸ '; color: var(--amber);
+  }
+  .elicitor-answer {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    padding: 0.5rem 0.75rem;
+    resize: vertical;
+    min-height: 56px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .elicitor-answer:focus { border-color: var(--accent); }
+  .elicitor-answer::placeholder { color: var(--muted); opacity: 0.55; font-style: italic; }
+  .elicitor-footer {
+    padding: 0.875rem 1.5rem;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .elicitor-skip {
+    font-size: 0.75rem; color: var(--muted);
+    background: none; border: none; cursor: pointer;
+    text-decoration: underline; text-underline-offset: 2px;
+    padding: 0;
+  }
+  .elicitor-skip:hover { color: var(--text); }
+
+  /* ── Cost card ── */
+  .cost-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+  }
+  .cost-row:last-child { border-bottom: none; }
+  .cost-label { color: var(--muted); }
+  .cost-val   { font-family: monospace; color: var(--yellow); font-weight: 600; }
+  .cost-val.total { color: var(--orange); font-size: 0.9rem; }
+
+  /* ── Mode switching ───────────────────────────────────────────────────────── */
+  /* Simple mode is the default. body.mode-adv enables advanced. */
+
+  /* Elements shown only in advanced mode */
+  .adv { display: none !important; }
+  .mode-adv .adv          { display: block   !important; }
+  .mode-adv .adv-flex     { display: flex    !important; }
+  .mode-adv .adv-iflex    { display: inline-flex !important; }
+  .mode-adv .adv-inline   { display: inline  !important; }
+
+  /* In simple mode the prompt grid collapses to single column */
+  body:not(.mode-adv) .prompt-grid { grid-template-columns: 1fr; }
+  body:not(.mode-adv) .prompt-pane:first-child { border-right: none; }
+
+  /* ── Mode toggle button ── */
+  .header-right { display: flex; align-items: center; gap: 0.875rem; }
+  .mode-btn {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em;
+    padding: 0.28rem 0.75rem; border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent; color: var(--muted);
+    cursor: pointer; transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap; text-transform: uppercase;
+  }
+  .mode-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ── Simple / advanced label switches ── */
+  .lbl-adv { display: none; }
+  .mode-adv .lbl-sim { display: none; }
+  .mode-adv .lbl-adv { display: block; }
+  .mode-adv .lbl-adv-inline { display: inline; }
+  .lbl-adv-inline { display: none; }
+
+  /* ── Simple progress steps ── */
+  #progressCard { display: none; }  /* JS shows/hides */
+
+  .progress-steps { padding: 0.375rem 0; }
+  .progress-step {
+    display: flex; align-items: center; gap: 1.125rem;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .progress-step:last-child { border-bottom: none; }
+
+  .ps-icon  { font-size: 1.4rem; flex-shrink: 0; width: 2rem; text-align: center; }
+  .ps-body  { flex: 1; }
+  .ps-label { font-size: 0.875rem; font-weight: 600; color: var(--muted); line-height: 1.3; }
+  .ps-sub   { font-size: 0.72rem; color: var(--muted); opacity: 0; margin-top: 0.2rem; transition: opacity 0.3s; }
+  .ps-tick  { font-size: 1.1rem; flex-shrink: 0; }
+
+  /* Pending */
+  .ps-pending .ps-icon { opacity: 0.2; }
+
+  /* Active */
+  .ps-active  { background: rgba(251,146,60,0.04); }
+  .ps-active .ps-icon  { animation: ps-pulse 1.6s ease-in-out infinite; }
+  .ps-active .ps-label { color: var(--amber); }
+  .ps-active .ps-sub   { opacity: 1; color: var(--amber); }
+
+  /* Done */
+  .ps-done .ps-icon  { opacity: 1; }
+  .ps-done .ps-label { color: var(--text); }
+  .ps-done .ps-sub   { opacity: 0.6; }
+
+  @keyframes ps-pulse { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+
+  @media (max-width: 680px) {
+    .guide-intro { flex-direction: column; gap: 0.75rem; }
+    .prompt-grid { grid-template-columns: 1fr; }
+    .prompt-pane:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+    .nl-card { font-size: 0.9rem; }
+    .nl-header, .nl-intro, .nl-section, .nl-closing { padding-left: 1.25rem; padding-right: 1.25rem; }
+    .nl-title { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">📰 Newsletter Agent</div>
+    <div class="header-sub"><span class="lbl-sim">Turn your open tabs into a newsletter</span><span class="lbl-adv">Discovery → Research → Newsletter</span></div>
+  </div>
+  <div class="header-right">
+    <span id="liveCost">$0.0000</span>
+    <button class="mode-btn" id="modeBtn" onclick="toggleMode()">⚙ Advanced</button>
+  </div>
+</div>
+
+<main>
+
+  <!-- Chrome tabs -->
+  <div class="card" id="tabsCard">
+    <div class="card-header">
+      <span>📂 Chrome Tabs <span id="tabCountBadge" class="badge" style="margin-left:0.5rem">loading…</span></span>
+      <button class="btn btn-secondary" style="padding:0.25rem 0.6rem;font-size:0.72rem" onclick="loadTabs()">↺ Refresh</button>
+    </div>
+    <div id="tabsBody"><div class="tabs-empty">Connecting to Chrome…</div></div>
+  </div>
+
+  <!-- Prompt editor -->
+  <div class="card">
+    <div class="card-header">
+      <span><span class="lbl-sim">What should the newsletter cover?</span><span class="lbl-adv">Guide the Agents</span></span>
+      <span id="savedBadge" class="badge" style="display:none">Saved ✓</span>
+    </div>
+
+    <!-- How it works -->
+    <div class="guide-intro adv adv-flex">
+      <div class="guide-step">
+        <span class="guide-step-num">01</span>
+        <span class="guide-step-text"><strong>Discovery Agent</strong> fetches the open tabs from the browser running in debug mode, extracts the content, and clusters it into themes. Your session context tells it what you care about and how to group what it finds.</span>
+      </div>
+      <div class="guide-step">
+        <span class="guide-step-num">02</span>
+        <span class="guide-step-text"><strong>Research Agent</strong> dives deeper into each cluster — following links, running searches — then writes the newsletter. Your style guidance shapes the tone, depth, and framing of every section.</span>
+      </div>
+    </div>
+
+    <div class="prompt-grid">
+
+      <!-- Discovery context -->
+      <div class="prompt-pane">
+        <div class="prompt-label">
+          <div class="prompt-label-title"><span class="lbl-sim">📝 What were you reading about?</span><span class="lbl-adv">📋 Your Session Context</span></div>
+          <div class="prompt-label-sub"><span class="lbl-sim">Describe your research and what angle matters most — the agent handles the rest.</span><span class="lbl-adv">What were you reading and why? The Discovery Agent uses this to prioritize, filter, and group content from your tabs.</span></div>
+        </div>
+        <div class="prompt-examples">
+          <span class="prompt-ex-label">Try:</span>
+          <button class="ex-chip" onclick="appendExample('discoveryPrompt', `I'm a software engineer exploring AI coding tools — focus on practical comparisons, pricing, and what teams are actually shipping.`)">AI tools researcher</button>
+          <button class="ex-chip" onclick="appendExample('discoveryPrompt', `Competitive research session on cloud infrastructure. Group by vendor. Highlight moat differences, pricing moves, and recent announcements.`)">Competitive analysis</button>
+          <button class="ex-chip" onclick="appendExample('discoveryPrompt', `I'm a product manager. Prioritize user-facing features, adoption signals, and business implications over technical implementation details.`)">Product focus</button>
+          <button class="ex-chip" onclick="appendExample('discoveryPrompt', `Background research on AI regulation and policy. Flag anything touching the EU AI Act, FDA guidance, or enforcement timelines.`)">Policy tracking</button>
+        </div>
+        <textarea id="discoveryPrompt" placeholder="Tell the agent what you were doing…
+
+• What topic or goal were these tabs about?
+• What's your role or background? (shapes what 'important' means)
+• Should anything be emphasized, downplayed, or grouped a specific way?
+• Any angle to watch for — regulatory, competitive, technical, financial?
+
+The more specific you are, the more targeted the clustering and the sharper the newsletter."></textarea>
+      </div>
+
+      <!-- Research style (advanced only) -->
+      <div class="prompt-pane adv adv-flex">
+        <div class="prompt-label">
+          <div class="prompt-label-title">✍️ Newsletter Style</div>
+          <div class="prompt-label-sub">How should it read? The Research Agent follows these instructions when writing each section — tone, depth, audience, format.</div>
+        </div>
+        <div class="prompt-examples">
+          <span class="prompt-ex-label">Try:</span>
+          <button class="ex-chip" onclick="appendExample('researchPrompt', `Executive summary style. 2–3 punchy paragraphs per section. Lead with the business implication, not the technical detail. Jargon-free.`)">Executive summary</button>
+          <button class="ex-chip" onclick="appendExample('researchPrompt', `Technical deep-dive. I want benchmark numbers, implementation specifics, and links to primary sources. Don't dumb it down.`)">Technical deep-dive</button>
+          <button class="ex-chip" onclick="appendExample('researchPrompt', `Write for a general audience. Explain concepts from first principles, use analogies, avoid acronyms unless defined.`)">General audience</button>
+          <button class="ex-chip" onclick="appendExample('researchPrompt', `Opinionated take — don't just summarize, tell me what this means, whether it matters, and who wins or loses.`)">Opinionated take</button>
+        </div>
+        <textarea id="researchPrompt" placeholder="Describe the tone and format you want…
+
+• Who is the reader? (you, your team, an exec, a general audience?)
+• How deep should each section go? (quick brief vs. thorough analysis)
+• Any framing preference? (neutral summary, strong opinion, practical implications)
+• Anything to lead with or avoid? (hype, caveats, competitor comparisons)
+
+Leave blank to use the default: direct, technically precise, link-rich."></textarea>
+      </div>
+
+    </div>
+    <div class="prompt-actions">
+      <button id="runBtn" class="btn btn-primary" onclick="run()"><span class="lbl-sim">✨ Generate Newsletter</span><span class="lbl-adv-inline">▶ Run</span></button>
+      <button id="phase2Btn" class="btn btn-secondary" onclick="runPhase2()" style="display:none">⚡ Research Only</button>
+      <button id="redoBtn" class="btn btn-danger" onclick="redo()" style="display:none">↺ Clear &amp; Redo</button>
+      <div id="phase1Banner" class="phase-banner p1">
+        <span>⬤</span><span id="p1Msg">Discovery running...</span>
+      </div>
+      <div id="phase2Banner" class="phase-banner p2">
+        <span>⬤</span><span id="p2Msg">Research running...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simple mode: progress steps -->
+  <div class="card" id="progressCard" style="display:none">
+    <div class="card-header"><span>Progress</span></div>
+    <div class="progress-steps">
+      <div class="progress-step ps-pending" id="ps0">
+        <span class="ps-icon">📖</span>
+        <div class="ps-body">
+          <div class="ps-label">Fetching &amp; clustering your tabs</div>
+          <div class="ps-sub" id="ps0-sub"></div>
+        </div>
+        <span class="ps-tick" id="ps0-tick"></span>
+      </div>
+      <div class="progress-step ps-pending" id="ps1">
+        <span class="ps-icon">🔍</span>
+        <div class="ps-body">
+          <div class="ps-label">Researching topics in depth</div>
+          <div class="ps-sub" id="ps1-sub"></div>
+        </div>
+        <span class="ps-tick" id="ps1-tick"></span>
+      </div>
+      <div class="progress-step ps-pending" id="ps2">
+        <span class="ps-icon">✍️</span>
+        <div class="ps-body">
+          <div class="ps-label">Writing your newsletter</div>
+          <div class="ps-sub" id="ps2-sub"></div>
+        </div>
+        <span class="ps-tick" id="ps2-tick"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity log (advanced mode) -->
+  <div class="card" id="activityCard" style="display:none">
+    <div class="card-header">
+      <span>Agent Activity</span>
+      <span id="feedStatus" style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0"></span>
+    </div>
+    <div class="feed-log" id="feedLog"></div>
+  </div>
+
+  <!-- Clusters output -->
+  <div class="card" id="clustersCard" style="display:none">
+    <div class="card-header">
+      <span>Discovery Clusters</span>
+      <span id="clustersBadge" class="badge">0 clusters</span>
+    </div>
+    <div class="clusters-grid" id="clustersGrid"></div>
+  </div>
+
+  <!-- Newsletter output -->
+  <div id="newsletterWrap" style="display:none">
+    <div class="card-header" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px 10px 0 0;border-bottom:none;padding:0.6rem 1rem">
+      <span style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Newsletter</span>
+      <span id="downloadBtns" style="display:none;gap:0.5rem;align-items:center" class="download-btns">
+        <a id="htmlLink" href="/api/newsletter.html" target="_blank" class="btn btn-secondary" style="padding:0.25rem 0.7rem;font-size:0.72rem;text-decoration:none">⬇ HTML</a>
+        <a id="pdfLink"  href="/api/newsletter.pdf"  class="btn btn-secondary" style="padding:0.25rem 0.7rem;font-size:0.72rem;text-decoration:none;display:none">⬇ PDF</a>
+        <button id="podcastBtn" class="btn btn-secondary" onclick="startPodcast()" style="padding:0.25rem 0.7rem;font-size:0.72rem">🎙 Podcast</button>
+      </span>
+    </div>
+    <div id="newsletterOut"></div>
+  </div>
+
+  <!-- Podcast player -->
+  <div class="card" id="podcastCard" style="display:none">
+    <div class="card-header">
+      <span>🎙 Podcast</span>
+      <span id="podcastStatus" style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;font-size:0.75rem"></span>
+    </div>
+    <div style="padding:1rem 1.25rem;display:flex;flex-direction:column;gap:0.875rem">
+      <div id="podcastControls" style="display:none;gap:0.5rem;align-items:flex-start;flex-wrap:wrap;flex-direction:column">
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+          <button id="playPauseBtn" class="btn btn-primary" style="padding:0.4rem 1rem;font-size:0.82rem" onclick="togglePlayback()">▶ Play</button>
+          <button class="btn btn-secondary" style="padding:0.4rem 0.8rem;font-size:0.82rem" onclick="stopPlayback()">⏹ Stop</button>
+          <a id="scriptDownload" href="/api/podcast-script" class="btn btn-secondary" style="padding:0.4rem 0.8rem;font-size:0.72rem;text-decoration:none">⬇ Script</a>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;width:100%;max-width:480px">
+          <label style="font-size:0.68rem;color:var(--muted);display:flex;align-items:center;gap:0.5rem">
+            Voice
+            <select id="voicePicker" onchange="onVoiceChange()" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:0.72rem;padding:0.15rem 0.3rem"></select>
+          </label>
+          <label style="font-size:0.68rem;color:var(--muted);display:flex;align-items:center;gap:0.5rem">
+            Speed
+            <input type="range" id="speechRate" min="0.6" max="1.8" step="0.05" value="1.0" style="flex:1" oninput="updateSpeechRate(this.value)">
+            <span id="rateDisplay" style="font-family:monospace;font-size:0.72rem;min-width:2.5rem">1.0×</span>
+          </label>
+          <label style="font-size:0.68rem;color:var(--muted);display:flex;align-items:center;gap:0.5rem">
+            Pause
+            <input type="range" id="sentPause" min="0" max="800" step="50" value="250" style="flex:1" oninput="document.getElementById('pauseDisplay').textContent=this.value+'ms'">
+            <span id="pauseDisplay" style="font-family:monospace;font-size:0.72rem;min-width:2.5rem">250ms</span>
+          </label>
+        </div>
+      </div>
+      <div id="podcastScriptPreview" style="display:none;font-size:0.78rem;line-height:1.7;color:var(--muted);max-height:200px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0.75rem 1rem;white-space:pre-wrap"></div>
+    </div>
+  </div>
+
+  <!-- Cost card -->
+  <div class="card" id="costCard" style="display:none">
+    <div class="card-header"><span>Pipeline Cost</span></div>
+    <div id="costRows"></div>
+  </div>
+
+</main>
+
+<!-- Elicitor modal (hidden until run) -->
+<div id="elicitorModal" class="elicitor-overlay" style="display:none" onclick="handleElicitorBackdrop(event)">
+  <div class="elicitor-panel">
+    <div class="elicitor-header">
+      <div class="elicitor-eyebrow">Context Elicitor</div>
+      <div class="elicitor-title">A couple of quick questions</div>
+      <div class="elicitor-suggestion" id="elicitorSuggestion"></div>
+    </div>
+    <div class="elicitor-body" id="elicitorBody"></div>
+    <div class="elicitor-footer">
+      <button class="elicitor-skip" onclick="skipElicitor()">Skip — use context as-is</button>
+      <button class="btn btn-primary" id="elicitorGoBtn" onclick="submitElicitor()">Start Newsletter →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const ICONS = {
+    status: '◆', thinking: '💭', agent_text: '🤖',
+    tool_call: '🔧', tool_result: '✅', phase: '🚀',
+    prompt: '📨', step_cost: '💰', done: '🎉', error: '❌'
+  };
+
+  let grandTotal           = 0;
+  let _elicitorCostRunning = 0;
+  let _discCostRunning     = 0;
+  let _resCostRunning      = 0;
+  let _podcastCostRunning  = 0;
+  let es                   = null;
+  let _speechScript        = '';
+
+  // ── Mode init ────────────────────────────────────────────────────────────────
+  (function() {
+    if (localStorage.getItem('nl-mode') === 'adv') {
+      document.body.classList.add('mode-adv');
+      document.getElementById('modeBtn').textContent = '← Simple';
+    }
+  })();
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('elicitorModal').style.display !== 'none')
+      skipElicitor();
+  });
+
+  // ── Chrome tabs ──────────────────────────────────────────────────────────────
+
+  async function loadTabs() {
+    const body  = document.getElementById('tabsBody');
+    const badge = document.getElementById('tabCountBadge');
+    body.innerHTML = '<div class="tabs-empty">Refreshing…</div>';
+    try {
+      const { tabs, error } = await fetch('/api/tabs').then(r => r.json());
+      if (error && !tabs.length) {
+        body.innerHTML = `<div class="tabs-error">⚠️ ${esc(error)}</div>`;
+        badge.textContent = '0 tabs';
+        return;
+      }
+      badge.textContent = `${tabs.length} tab${tabs.length !== 1 ? 's' : ''}`;
+      if (!tabs.length) {
+        body.innerHTML = '<div class="tabs-empty">No pages open in Chrome (chrome:// and localhost tabs are excluded).</div>';
+        return;
+      }
+      body.innerHTML = `<div class="tabs-list">${tabs.map(t => {
+        const host = (() => { try { return new URL(t.url).hostname; } catch { return ''; } })();
+        return `<div class="tab-row">
+          <img class="tab-favicon" src="https://www.google.com/s2/favicons?sz=16&domain=${esc(host)}" onerror="this.style.display='none'" alt="">
+          <span class="tab-title" title="${esc(t.url)}">${esc(t.title)}</span>
+          <span class="tab-url">${esc(host)}</span>
+        </div>`;
+      }).join('')}</div>`;
+    } catch (e) {
+      body.innerHTML = `<div class="tabs-error">⚠️ ${esc(String(e.message))}</div>`;
+      badge.textContent = 'error';
+    }
+  }
+
+  function renderTabsFromEvent(tabs) {
+    const body  = document.getElementById('tabsBody');
+    const badge = document.getElementById('tabCountBadge');
+    badge.textContent = `${tabs.length} tab${tabs.length !== 1 ? 's' : ''}`;
+    body.innerHTML = `<div class="tabs-list">${tabs.map(t => {
+      const host = (() => { try { return new URL(t.url).hostname; } catch { return ''; } })();
+      return `<div class="tab-row">
+        <img class="tab-favicon" src="https://www.google.com/s2/favicons?sz=16&domain=${esc(host)}" onerror="this.style.display='none'" alt="">
+        <span class="tab-title" title="${esc(t.url)}">${esc(t.title)}</span>
+        <span class="tab-url">${esc(host)}</span>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  // ── Load prompts and status on start ────────────────────────────────────────
+
+  (async () => {
+    loadTabs();   // populate tab list immediately
+    try {
+      const [promptsRes, statusRes] = await Promise.all([
+        fetch('/api/prompts'),
+        fetch('/api/status')
+      ]);
+      const prompts = await promptsRes.json();
+      const status  = await statusRes.json();
+
+      document.getElementById('discoveryPrompt').value = prompts.discovery || '';
+      document.getElementById('researchPrompt').value  = prompts.research  || '';
+
+      if (status.hasClusters && status.clusters) {
+        renderClusters(status.clusters);
+        if (isAdv()) document.getElementById('phase2Btn').style.display = 'inline-flex';
+      }
+      if (status.hasNewsletter && status.newsletter) {
+        renderNewsletter(status.newsletter);
+        showDownloads('/api/newsletter.html', status.hasPdf ? '/api/newsletter.pdf' : null);
+        if (isAdv()) document.getElementById('redoBtn').style.display = 'inline-flex';
+        if (status.hasPodcast) {
+          fetch('/api/podcast-script').then(r => r.text()).then(t => {
+            _speechScript = t;
+            document.getElementById('podcastCard').style.display = '';
+            showPodcastReady();
+          }).catch(() => {});
+        }
+      }
+      if (status.cost) renderCostCard(status.cost);
+    } catch (_) {}
+  })();
+
+  // ── Elicitor modal ───────────────────────────────────────────────────────────
+
+  let _elicitorQuestions = [];
+
+  function showElicitor(questions, suggestion) {
+    _elicitorQuestions = questions;
+    document.getElementById('elicitorSuggestion').textContent = suggestion || '';
+    document.getElementById('elicitorBody').innerHTML = questions.map((q, i) => `
+      <div class="elicitor-q">
+        <label class="elicitor-q-label" for="eq${i}">${esc(q)}</label>
+        <textarea class="elicitor-answer" id="eq${i}" rows="2" placeholder="Your answer (or leave blank to skip this one)…"></textarea>
+      </div>
+    `).join('');
+    document.getElementById('elicitorModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('eq0')?.focus(), 80);
+  }
+
+  function handleElicitorBackdrop(e) {
+    if (e.target === document.getElementById('elicitorModal')) skipElicitor();
+  }
+
+  function skipElicitor() {
+    document.getElementById('elicitorModal').style.display = 'none';
+    clearUI();
+    startStream('/api/stream');
+  }
+
+  async function submitElicitor() {
+    const qa = _elicitorQuestions.map((q, i) => ({
+      q,
+      a: document.getElementById(`eq${i}`)?.value?.trim() || ''
+    }));
+
+    const btn = document.getElementById('elicitorGoBtn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    try {
+      const existingContext = document.getElementById('discoveryPrompt').value;
+      const res  = await fetch('/api/elicit/synthesize', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ existingContext, qa })
+      });
+      const { synthesizedContext } = await res.json();
+      if (synthesizedContext) {
+        document.getElementById('discoveryPrompt').value = synthesizedContext;
+        await savePrompts();
+      }
+    } catch (_) { /* proceed anyway */ }
+
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    document.getElementById('elicitorModal').style.display = 'none';
+    clearUI();
+    startStream('/api/stream');
+  }
+
+  // ── Example chips ────────────────────────────────────────────────────────────
+
+  function appendExample(id, text) {
+    const ta = document.getElementById(id);
+    const cur = ta.value.trim();
+    ta.value = cur ? cur + '\n\n' + text : text;
+    ta.focus();
+    savePrompts();
+  }
+
+  // ── Auto-save prompts on blur ────────────────────────────────────────────────
+
+  ['discoveryPrompt', 'researchPrompt'].forEach(id => {
+    document.getElementById(id).addEventListener('blur', savePrompts);
+  });
+
+  async function savePrompts() {
+    const discovery = document.getElementById('discoveryPrompt').value;
+    const research  = document.getElementById('researchPrompt').value;
+    try {
+      await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discovery, research })
+      });
+      const badge = document.getElementById('savedBadge');
+      badge.style.display = 'inline-block';
+      setTimeout(() => { badge.style.display = 'none'; }, 2000);
+    } catch (_) {}
+  }
+
+  // ── Run controls ─────────────────────────────────────────────────────────────
+
+  async function run() {
+    await savePrompts();
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    try {
+      const existingContext = document.getElementById('discoveryPrompt').value;
+      const res  = await fetch('/api/elicit', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ existingContext })
+      });
+      const { ready, questions, suggestion } = await res.json();
+
+      btn.disabled = false;
+      btn.classList.remove('loading');
+
+      if (ready || !questions?.length) {
+        clearUI();
+        startStream('/api/stream');
+      } else {
+        showElicitor(questions, suggestion);
+      }
+    } catch (_) {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      clearUI();
+      startStream('/api/stream');
+    }
+  }
+
+  async function runPhase2() {
+    await savePrompts();
+    document.getElementById('feedLog').innerHTML = '';
+    document.getElementById('newsletterWrap').style.display = 'none';
+    document.getElementById('costCard').style.display = 'none';
+    document.getElementById('activityCard').style.display = '';
+    _discCostRunning = 0;
+    _resCostRunning  = 0;
+    if (!isAdv()) {
+      resetSteps();
+      setStep(0, 'done', 'already complete');
+      setStep(1, 'active');
+      document.getElementById('progressCard').style.display = '';
+    }
+    startStream('/api/stream?phase=2');
+  }
+
+  async function redo() {
+    await savePrompts();
+    clearUI();
+    startStream('/api/stream?redo=true');
+  }
+
+  function clearUI() {
+    document.getElementById('feedLog').innerHTML      = '';
+    document.getElementById('clustersGrid').innerHTML = '';
+    document.getElementById('costRows').innerHTML     = '';
+    document.getElementById('clustersCard').style.display   = 'none';
+    document.getElementById('newsletterWrap').style.display = 'none';
+    document.getElementById('costCard').style.display       = 'none';
+    document.getElementById('phase2Btn').style.display      = 'none';
+    document.getElementById('redoBtn').style.display        = 'none';
+    grandTotal           = 0;
+    _elicitorCostRunning = 0;
+    _discCostRunning     = 0;
+    _resCostRunning      = 0;
+    _podcastCostRunning  = 0;
+    document.getElementById('liveCost').style.display = 'none';
+    resetSteps();
+    document.getElementById('activityCard').style.display = '';
+    document.getElementById('progressCard').style.display = isAdv() ? 'none' : '';
+  }
+
+  function startStream(url) {
+    if (es) { es.close(); es = null; }
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    es = new EventSource(url);
+
+    es.onmessage = (e) => {
+      const { type, data } = JSON.parse(e.data);
+
+      switch (type) {
+        case 'phase':
+          if (isAdv()) {
+            if (data.phase === 1) {
+              document.getElementById('phase1Banner').classList.add('active');
+              document.getElementById('phase2Banner').classList.remove('active');
+              document.getElementById('p1Msg').textContent = data.message;
+            } else {
+              document.getElementById('phase1Banner').classList.remove('active');
+              document.getElementById('phase2Banner').classList.add('active');
+              document.getElementById('p2Msg').textContent = data.message;
+            }
+          } else {
+            if (data.phase === 1) setStep(0, 'active');
+            else { setStep(0, 'done'); setStep(1, 'active'); }
+          }
+          addLog('phase', `Phase ${data.phase}: ${data.label} — ${data.message}`);
+          break;
+
+        case 'status':
+          document.getElementById('feedStatus').textContent = data.message;
+          addLog('status', data.message);
+          break;
+
+        case 'thinking':
+          addLog('thinking', `💭 ${data.text}`);
+          break;
+
+        case 'agent_text':
+          if (data.text?.trim()) addLog('agent_text', data.text);
+          break;
+
+        case 'tool_call':
+          if (data.tool === 'fetch_page')
+            addLog('tool_call', `→ fetch_page(${data.url})`);
+          else if (data.tool === 'web_search')
+            addLog('tool_call', `→ web_search("${data.query}")`);
+          else if (data.tool === 'submit_clusters')
+            addLog('tool_call', `→ submit_clusters(...)`);
+          else if (data.tool === 'write_newsletter') {
+            addLog('tool_call', `→ write_newsletter(...)`);
+            if (!isAdv()) { setStep(1, 'done'); setStep(2, 'active'); }
+          } else
+            addLog('tool_call', `→ ${data.tool}(...)`);
+          break;
+
+        case 'tool_result':
+          if (data.tool === 'fetch_page')
+            addLog('tool_result', `✓ fetch_page → ${data.url}`);
+          else if (data.tool === 'web_search')
+            addLog('tool_result', `✓ web_search → ${data.count} results`);
+          break;
+
+        case 'tabs':
+          renderTabsFromEvent(data.tabs);
+          break;
+
+        case 'clusters':
+          renderClusters(data.clusters);
+          if (isAdv()) document.getElementById('phase2Btn').style.display = 'inline-flex';
+          else { setStep(0, 'done', `${data.clusters.length} topics found`); setStep(1, 'active'); }
+          break;
+
+        case 'newsletter':
+          renderNewsletter(data.newsletter);
+          if (isAdv()) document.getElementById('redoBtn').style.display = 'inline-flex';
+          else setStep(2, 'done', 'Your newsletter is ready below ↓');
+          break;
+
+        case 'output_ready':
+          showDownloads(data.html, data.pdf);
+          addLog('done', `Files ready — ${data.html}${data.pdf ? ', ' + data.pdf : ''}`);
+          break;
+
+        case 'prompt': {
+          const log = document.getElementById('feedLog');
+          const t   = new Date().toLocaleTimeString('en-US', { hour12: false });
+          const row = document.createElement('div');
+          row.className = 'log-row prompt';
+          const n = data.messages.length;
+          const sysHtml = data.system
+            ? `<div class="prompt-msg"><div class="prompt-role system">system</div><div class="prompt-content">${esc(data.system.slice(0, 800))}</div></div>`
+            : '';
+          row.innerHTML = `<span class="log-t">${t}</span><span class="log-ic">📨</span><span class="log-msg"><details class="prompt-details"><summary>Prompt · step ${data.step} · ${n} msg${n !== 1 ? 's' : ''} (${esc(data.agent)})</summary><div class="prompt-body">${sysHtml}${formatPromptMessages(data.messages)}</div></details></span>`;
+          log.appendChild(row);
+          log.scrollTop = log.scrollHeight;
+          break;
+        }
+
+        case 'step_cost': {
+          grandTotal = data.running_total;
+          if (isAdv()) {
+            const lc = document.getElementById('liveCost');
+            lc.style.display = 'inline';
+            lc.textContent = fmtCost(grandTotal);
+          }
+          if      (data.agent === 'elicitor') _elicitorCostRunning += data.cost;
+          else if (data.agent === 'discovery') _discCostRunning     += data.cost;
+          else if (data.agent === 'research')  _resCostRunning      += data.cost;
+          updateCostCardRunning();
+          const toks = `${fmtTok(data.input_tokens)}↑ ${fmtTok(data.output_tokens)}↓`
+            + (data.cache_read_tokens  ? ` ${fmtTok(data.cache_read_tokens)}⚡`  : '')
+            + (data.cache_write_tokens ? ` ${fmtTok(data.cache_write_tokens)}✎` : '');
+          addLog('step_cost', `${data.label} · ${fmtCost(data.cost)} · ${toks}`);
+          break;
+        }
+
+        case 'pipeline_cost':
+          renderCostCard(data);
+          break;
+
+        case 'done':
+          addLog('done', data.message);
+          finish();
+          es.close(); es = null;
+          break;
+
+        case 'error':
+          addLog('error', data.message);
+          finish();
+          es.close(); es = null;
+          break;
+      }
+    };
+
+    es.onerror = () => {
+      addLog('error', 'Connection lost.');
+      finish();
+      if (es) { es.close(); es = null; }
+    };
+  }
+
+  function finish() {
+    document.getElementById('phase1Banner').classList.remove('active');
+    document.getElementById('phase2Banner').classList.remove('active');
+    const btn = document.getElementById('runBtn');
+    btn.disabled = false;
+    btn.classList.remove('loading');
+  }
+
+  // ── Download helpers ─────────────────────────────────────────────────────────
+
+  function showDownloads(htmlUrl, pdfUrl) {
+    const btns = document.getElementById('downloadBtns');
+    btns.style.display = 'flex';
+    if (htmlUrl) document.getElementById('htmlLink').href = htmlUrl;
+    const pdfLink = document.getElementById('pdfLink');
+    if (pdfUrl) { pdfLink.href = pdfUrl; pdfLink.style.display = 'inline-flex'; }
+    else { pdfLink.style.display = 'none'; }
+  }
+
+  // ── Render clusters ──────────────────────────────────────────────────────────
+
+  function renderClusters(clusters) {
+    const card = document.getElementById('clustersCard');
+    const grid = document.getElementById('clustersGrid');
+    document.getElementById('clustersBadge').textContent = `${clusters.length} cluster${clusters.length !== 1 ? 's' : ''}`;
+    grid.innerHTML = clusters.map(c => `
+      <div class="cluster-card">
+        <div class="cluster-title">${esc(c.title)}</div>
+        <div class="cluster-theme">${esc(c.theme_summary)}</div>
+        <div class="cluster-meta">${c.sources.length} source${c.sources.length !== 1 ? 's' : ''}</div>
+        <ul class="cluster-sources">
+          ${c.sources.map(s => `<li title="${esc(s.url)}"><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.page_title || s.url)}</a></li>`).join('')}
+        </ul>
+      </div>
+    `).join('');
+    if (isAdv()) card.style.display = '';
+  }
+
+  // ── Render newsletter ────────────────────────────────────────────────────────
+
+  function renderNewsletter(nl) {
+    const wrap = document.getElementById('newsletterWrap');
+    const out  = document.getElementById('newsletterOut');
+
+    const date = nl.generatedAt
+      ? new Date(nl.generatedAt).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+      : new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+    const sectionsHtml = (nl.sections || []).map((s, i) => `
+      <div class="nl-section">
+        <div class="nl-section-header">
+          <span class="nl-section-num">${String(i + 1).padStart(2, '0')}</span>
+          <h2 class="nl-headline">${esc(s.headline)}</h2>
+        </div>
+        <div class="nl-body">${s.body || ''}</div>
+        ${s.key_links?.length ? `
+        <div class="nl-links">
+          <div class="nl-links-label">Further Reading</div>
+          <ul>${s.key_links.map(l => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.text)}</a>${l.published_date ? `<span class="nl-link-date"> — ${esc(l.published_date)}</span>` : ''}</li>`).join('')}</ul>
+        </div>` : ''}
+      </div>
+    `).join('');
+
+    out.innerHTML = `
+      <div class="nl-card">
+        <div class="nl-header">
+          <div class="nl-eyebrow">Intelligence Brief</div>
+          <h1 class="nl-title">${esc(nl.title || 'Newsletter')}</h1>
+          <div class="nl-dateline">${date}</div>
+        </div>
+        <div class="nl-intro">${nl.intro || ''}</div>
+        ${sectionsHtml}
+        ${nl.closing ? `<div class="nl-closing">${nl.closing}</div>` : ''}
+      </div>
+    `;
+
+    wrap.style.display = 'block';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── Cost card ────────────────────────────────────────────────────────────────
+
+  function updateCostCardRunning() {
+    const card  = document.getElementById('costCard');
+    const rows  = document.getElementById('costRows');
+    const total = _elicitorCostRunning + _discCostRunning + _resCostRunning + _podcastCostRunning;
+    rows.innerHTML = `
+      ${_elicitorCostRunning > 0 ? `<div class="cost-row"><span class="cost-label">Elicitor</span><span class="cost-val">${fmtCost(_elicitorCostRunning)}</span></div>` : ''}
+      <div class="cost-row"><span class="cost-label">Discovery</span><span class="cost-val">${fmtCost(_discCostRunning)}</span></div>
+      ${_resCostRunning    > 0 ? `<div class="cost-row"><span class="cost-label">Research</span><span class="cost-val">${fmtCost(_resCostRunning)}</span></div>` : ''}
+      ${_podcastCostRunning > 0 ? `<div class="cost-row"><span class="cost-label">Podcast</span><span class="cost-val">${fmtCost(_podcastCostRunning)}</span></div>` : ''}
+      <div class="cost-row"><span class="cost-label">Running Total</span><span class="cost-val total">${fmtCost(total)}</span></div>
+    `;
+    card.style.display = '';
+  }
+
+  function renderCostCard(cost) {
+    const card       = document.getElementById('costCard');
+    const rows       = document.getElementById('costRows');
+    const grandTotal = _elicitorCostRunning + (cost.grand_total || 0) + _podcastCostRunning;
+    rows.innerHTML = `
+      ${_elicitorCostRunning  > 0 ? `<div class="cost-row"><span class="cost-label">Elicitor</span><span class="cost-val">${fmtCost(_elicitorCostRunning)}</span></div>` : ''}
+      <div class="cost-row"><span class="cost-label">Discovery</span><span class="cost-val">${fmtCost(cost.discovery?.total || 0)}</span></div>
+      <div class="cost-row"><span class="cost-label">Research</span><span class="cost-val">${fmtCost(cost.research?.total || 0)}</span></div>
+      ${_podcastCostRunning   > 0 ? `<div class="cost-row"><span class="cost-label">Podcast</span><span class="cost-val">${fmtCost(_podcastCostRunning)}</span></div>` : ''}
+      <div class="cost-row"><span class="cost-label">Grand Total</span><span class="cost-val total">${fmtCost(grandTotal)}</span></div>
+    `;
+    card.style.display = '';
+  }
+
+  // ── Mode & progress ──────────────────────────────────────────────────────────
+
+  function isAdv() { return document.body.classList.contains('mode-adv'); }
+
+  function toggleMode() {
+    const adv = !isAdv();
+    document.body.classList.toggle('mode-adv', adv);
+    localStorage.setItem('nl-mode', adv ? 'adv' : 'sim');
+    document.getElementById('modeBtn').textContent = adv ? '← Simple' : '⚙ Advanced';
+
+    // Keep activity/cost always visible; swap progress card based on mode
+    const hasFeed = document.getElementById('feedLog').children.length > 0;
+    if (hasFeed) {
+      document.getElementById('progressCard').style.display = adv ? 'none' : '';
+    }
+    // Hide advanced-only chrome when switching to simple
+    if (!adv) {
+      document.getElementById('liveCost').style.display = 'none';
+      document.getElementById('phase1Banner').classList.remove('active');
+      document.getElementById('phase2Banner').classList.remove('active');
+      document.getElementById('phase2Btn').style.display = 'none';
+      document.getElementById('redoBtn').style.display   = 'none';
+      document.getElementById('clustersCard').style.display = 'none';
+    }
+  }
+
+  function setStep(n, state, sub) {
+    const el = document.getElementById(`ps${n}`);
+    if (!el) return;
+    el.classList.remove('ps-pending', 'ps-active', 'ps-done');
+    el.classList.add(`ps-${state}`);
+    const subEl = document.getElementById(`ps${n}-sub`);
+    if (sub !== undefined && subEl) subEl.textContent = sub;
+    const tick = document.getElementById(`ps${n}-tick`);
+    if (tick) tick.textContent = state === 'done' ? '✓' : '';
+  }
+
+  function resetSteps() {
+    [0, 1, 2].forEach(n => setStep(n, 'pending', ''));
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function addLog(type, text) {
+    const log = document.getElementById('feedLog');
+    const t   = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const row = document.createElement('div');
+    row.className = `log-row ${type}`;
+    row.innerHTML = `<span class="log-t">${t}</span><span class="log-ic">${ICONS[type] || '·'}</span><span class="log-msg">${esc(text)}</span>`;
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtCost(d) { return `$${(d || 0).toFixed(4)}`; }
+  function fmtTok(n)  { return n >= 1000 ? `${(n/1000).toFixed(1)}K` : String(n || 0); }
+
+  // ── Podcast ──────────────────────────────────────────────────────────────────
+
+  let _voices    = [];
+  let _chunks    = [];
+  let _playing   = false;
+  let _paused    = false;
+
+  // Load and sort voices — prefer Google voices (much more natural in Chrome)
+  function _loadVoices() {
+    _voices = [...(window.speechSynthesis?.getVoices() || [])].sort((a, b) => {
+      const rank = v =>
+        (v.name.startsWith('Google') && v.lang.startsWith('en')) ? 0 :
+        (!v.localService && v.lang.startsWith('en'))             ? 1 :
+        v.lang.startsWith('en')                                  ? 2 : 3;
+      return rank(a) - rank(b);
+    });
+    const sel = document.getElementById('voicePicker');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = _voices.map((v, i) =>
+      `<option value="${i}">${v.name} (${v.lang})</option>`
+    ).join('');
+    if (prev && _voices[prev]) sel.value = prev;
+  }
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = _loadVoices;
+    _loadVoices();
+  }
+
+  function onVoiceChange() { /* voice read from picker on each utterance */ }
+
+  function _getVoice() {
+    const sel = document.getElementById('voicePicker');
+    return _voices[parseInt(sel?.value || '0')] || null;
+  }
+
+  // Split script into sentence chunks with pause metadata.
+  // Chunked playback lets each sentence breathe and respects punctuation.
+  function _buildChunks(text) {
+    const paraBreakPause  = 750;
+    const sentPauseBase   = parseInt(document.getElementById('sentPause')?.value || '250');
+
+    // Normalise em-dashes to commas (TTS handles commas as brief pauses)
+    const cleaned = text.replace(/—/g, ', ').replace(/\r/g, '');
+
+    const chunks = [];
+    const paras  = cleaned.split(/\n+/);
+    paras.forEach((para, pi) => {
+      const isLastPara = pi === paras.length - 1;
+      // Match sentences: anything ending in . ! ? followed by space or end
+      const sents = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [para];
+      sents.forEach((s, si) => {
+        const t = s.trim();
+        if (!t) return;
+        const isLastInPara = si === sents.length - 1;
+        chunks.push({
+          text:  t,
+          pause: isLastInPara && !isLastPara ? paraBreakPause : sentPauseBase
+        });
+      });
+    });
+    return chunks.length ? chunks : [{ text, pause: 0 }];
+  }
+
+  function _speakChunk(idx) {
+    if (!_playing || idx >= _chunks.length) {
+      if (_playing && idx >= _chunks.length) {
+        _playing = false;
+        document.getElementById('playPauseBtn').textContent = '▶ Play';
+        document.getElementById('podcastStatus').textContent = 'Done';
+      }
+      return;
+    }
+    const { text, pause } = _chunks[idx];
+    const utt  = new SpeechSynthesisUtterance(text);
+    utt.voice  = _getVoice();
+    utt.rate   = parseFloat(document.getElementById('speechRate')?.value || '1');
+    utt.onend  = () => { if (_playing) setTimeout(() => _speakChunk(idx + 1), pause); };
+    utt.onerror = e => {
+      if (e.error !== 'interrupted' && e.error !== 'canceled') {
+        document.getElementById('podcastStatus').textContent = `Error: ${e.error}`;
+      }
+    };
+    window.speechSynthesis.speak(utt);
+  }
+
+  async function startPodcast() {
+    const card   = document.getElementById('podcastCard');
+    const status = document.getElementById('podcastStatus');
+    const btn    = document.getElementById('podcastBtn');
+    card.style.display = '';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // If cached script exists, use it immediately — no generation needed
+    const checkRes = await fetch('/api/podcast-script').catch(() => null);
+    if (checkRes?.ok) {
+      _speechScript = await checkRes.text();
+      showPodcastReady();
+      return;
+    }
+
+    btn.disabled = true;
+    status.textContent = 'Generating podcast script…';
+    document.getElementById('activityCard').style.display = '';
+
+    const podES = new EventSource('/api/podcast-script/generate');
+    podES.onmessage = (e) => {
+      const { type, data } = JSON.parse(e.data);
+      switch (type) {
+        case 'phase':
+          addLog('phase', `${data.label} — ${data.message}`);
+          break;
+        case 'status':
+          status.textContent = data.message;
+          addLog('status', data.message);
+          break;
+        case 'thinking':
+          addLog('thinking', `💭 ${data.text}`);
+          break;
+        case 'agent_text':
+          if (data.text?.trim()) addLog('agent_text', data.text);
+          break;
+        case 'step_cost': {
+          _podcastCostRunning += data.cost;
+          updateCostCardRunning();
+          const toks = `${fmtTok(data.input_tokens)}↑ ${fmtTok(data.output_tokens)}↓`
+            + (data.cache_read_tokens  ? ` ${fmtTok(data.cache_read_tokens)}⚡`  : '')
+            + (data.cache_write_tokens ? ` ${fmtTok(data.cache_write_tokens)}✎` : '');
+          addLog('step_cost', `${data.label} · ${fmtCost(data.cost)} · ${toks}`);
+          break;
+        }
+        case 'done':
+          _speechScript = data.script;
+          showPodcastReady();
+          podES.close();
+          btn.disabled = false;
+          break;
+        case 'error':
+          status.textContent = `Error: ${data.message}`;
+          addLog('error', data.message);
+          podES.close();
+          btn.disabled = false;
+          break;
+      }
+    };
+    podES.onerror = () => {
+      status.textContent = 'Connection error';
+      addLog('error', 'Podcast generation connection lost.');
+      podES.close();
+      btn.disabled = false;
+    };
+  }
+
+  function showPodcastReady() {
+    document.getElementById('podcastStatus').textContent = 'Ready';
+    document.getElementById('podcastControls').style.display = 'flex';
+    const preview = document.getElementById('podcastScriptPreview');
+    preview.textContent = _speechScript;
+    preview.style.display = '';
+    _loadVoices(); // ensure voices are populated
+  }
+
+  function togglePlayback() {
+    const synth = window.speechSynthesis;
+    if (!synth) { alert('Speech synthesis not supported in this browser.'); return; }
+
+    if (_paused) {
+      synth.resume();
+      _paused   = false;
+      _playing  = true;
+      document.getElementById('playPauseBtn').textContent = '⏸ Pause';
+      document.getElementById('podcastStatus').textContent = 'Playing…';
+      return;
+    }
+
+    if (synth.speaking) {
+      synth.pause();
+      _paused  = true;
+      _playing = false;
+      document.getElementById('playPauseBtn').textContent = '▶ Resume';
+      document.getElementById('podcastStatus').textContent = 'Paused';
+      return;
+    }
+
+    // Fresh start
+    _chunks  = _buildChunks(_speechScript);
+    _playing = true;
+    _paused  = false;
+    document.getElementById('playPauseBtn').textContent = '⏸ Pause';
+    document.getElementById('podcastStatus').textContent = 'Playing…';
+    _speakChunk(0);
+  }
+
+  function stopPlayback() {
+    _playing = false;
+    _paused  = false;
+    window.speechSynthesis?.cancel();
+    document.getElementById('playPauseBtn').textContent = '▶ Play';
+    document.getElementById('podcastStatus').textContent = 'Stopped';
+  }
+
+  function updateSpeechRate(val) {
+    document.getElementById('rateDisplay').textContent = `${parseFloat(val).toFixed(1)}×`;
+  }
+
+  // ── Prompt messages ──────────────────────────────────────────────────────────
+
+  function formatPromptMessages(messages) {
+    return messages.map(msg => {
+      const roleClass = ['user','assistant','tool','system'].includes(msg.role) ? msg.role : 'user';
+      let body = '';
+
+      if (typeof msg.content === 'string') {
+        body = `<div class="prompt-content">${esc(msg.content.slice(0, 3000))}</div>`;
+      } else if (Array.isArray(msg.content)) {
+        body = msg.content.map(block => {
+          if (block.type === 'text')
+            return `<div class="prompt-content">${esc((block.text || '').slice(0, 2000))}</div>`;
+          if (block.type === 'tool_result')
+            return `<div class="prompt-content" style="color:var(--orange)">[tool_result] ${esc(String(block.content || '').slice(0, 1000))}</div>`;
+          if (block.type === 'tool_use')
+            return `<div class="prompt-content" style="color:var(--orange)">[tool_use: ${esc(block.name)}] ${esc(JSON.stringify(block.input).slice(0, 500))}</div>`;
+          if (block.type === 'thinking')
+            return `<div class="prompt-content" style="color:var(--purple);font-style:italic">[thinking] ${esc((block.thinking || '').slice(0, 400))}</div>`;
+          return `<div class="prompt-content">${esc(JSON.stringify(block).slice(0, 400))}</div>`;
+        }).join('');
+      }
+
+      return `<div class="prompt-msg"><div class="prompt-role ${roleClass}">${esc(msg.role)}</div>${body}</div>`;
+    }).join('');
+  }
+</script>
+</body>
+</html>
