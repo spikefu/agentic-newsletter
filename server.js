@@ -27,6 +27,7 @@ const NEWSLETTER_HTML   = path.join(CACHE_DIR, 'newsletter.html');
 const NEWSLETTER_PDF    = path.join(CACHE_DIR, 'newsletter.pdf');
 const NEWSLETTER_SCRIPT = path.join(CACHE_DIR, 'podcast-script.txt');
 const COST_CACHE        = path.join(CACHE_DIR, 'cost.json');
+const ELICITOR_CONTEXT  = path.join(CACHE_DIR, 'elicitor-context.txt');
 const DISCOVERY_PROMPT = path.join(__dirname, 'discovery-prompt.md');
 const RESEARCH_PROMPT  = path.join(__dirname, 'research-prompt.md');
 
@@ -127,6 +128,8 @@ app.post('/api/elicit/synthesize', async (req, res) => {
   const bufferSend = (type, data) => _elicitorBuffer.push({ type, data });
   try {
     const synthesizedContext = await synthesizeContext(tabs, existingContext || '', qa || [], bufferSend);
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(ELICITOR_CONTEXT, synthesizedContext, 'utf8');
     res.json({ synthesizedContext });
   } catch (e) {
     console.error('Synthesize error:', e.message);
@@ -205,7 +208,7 @@ app.get('/api/stream', async (req, res) => {
   const phase2 = req.query.phase  === '2';
 
   if (redo) {
-    [CLUSTERS_CACHE, NEWSLETTER_CACHE, NEWSLETTER_HTML, NEWSLETTER_PDF, NEWSLETTER_SCRIPT, COST_CACHE].forEach(f => {
+    [CLUSTERS_CACHE, NEWSLETTER_CACHE, NEWSLETTER_HTML, NEWSLETTER_PDF, NEWSLETTER_SCRIPT, COST_CACHE, ELICITOR_CONTEXT].forEach(f => {
       if (fs.existsSync(f)) fs.unlinkSync(f);
     });
   } else if (!phase2) {
@@ -219,9 +222,12 @@ app.get('/api/stream', async (req, res) => {
   _elicitorBuffer = [];
 
   try {
-    const contextPrompt = fs.existsSync(DISCOVERY_PROMPT)
-      ? fs.readFileSync(DISCOVERY_PROMPT, 'utf8').trim()
-      : '';
+    // Elicitor-synthesized context takes precedence over the raw prompt file
+    const contextPrompt = fs.existsSync(ELICITOR_CONTEXT)
+      ? fs.readFileSync(ELICITOR_CONTEXT, 'utf8').trim()
+      : fs.existsSync(DISCOVERY_PROMPT)
+        ? fs.readFileSync(DISCOVERY_PROMPT, 'utf8').trim()
+        : '';
     const researchPrompt = fs.existsSync(RESEARCH_PROMPT)
       ? fs.readFileSync(RESEARCH_PROMPT, 'utf8').trim()
       : '';

@@ -994,16 +994,13 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
     try {
       const existingContext = document.getElementById('discoveryPrompt').value;
-      const res  = await fetch('/api/elicit/synthesize', {
+      await fetch('/api/elicit/synthesize', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ existingContext, qa })
       });
-      const { synthesizedContext } = await res.json();
-      if (synthesizedContext) {
-        document.getElementById('discoveryPrompt').value = synthesizedContext;
-        await savePrompts();
-      }
+      // synthesized context is saved to cache/elicitor-context.txt on the server;
+      // the discovery-prompt.md template is left untouched
     } catch (_) { /* proceed anyway */ }
 
     btn.disabled = false;
