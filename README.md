@@ -48,7 +48,7 @@ chrome.exe --remote-debugging-port=9222
 google-chrome --remote-debugging-port=9222
 ```
 
-> Chrome must be launched this way *before* you start the server. Already-running Chrome instances don't expose the debug port.
+> Chrome must be launched this way *before* you start the server. Already-running Chrome instances don't expose the debug port. You'll need to either close all your regular profile Chrome instances, or tell it to create a profile or use one that's not currently running.
 
 ## Run the server
 
@@ -66,7 +66,7 @@ Then open [http://localhost:3002](http://localhost:3002).
 4. Click **✨ Generate Newsletter**.
 5. The **Elicitor** may ask a couple of clarifying questions first. Answer them or skip.
 6. Watch the **Agent Activity** and **Pipeline Cost** panels update live. All four stages (Elicitor, Discovery, Research, Podcast) feed into these panels — costs are broken out per stage.
-7. The finished newsletter renders on the page. Use **⬇ HTML** or **⬇ PDF** to download, or **🎙 Podcast** to generate a readable script (streams live into the activity and cost panels).
+7. The finished newsletter renders on the page. Use **⬇ HTML** or **⬇ PDF** to download, or **🎙 Podcast** to generate a script and a player with whatever speech synthesis voices your browser supports so you can listen  (streams live into the activity and cost panels).
 
 ### Advanced mode
 
@@ -122,6 +122,6 @@ cache/                — runtime output (gitignored)
 ## Tips
 
 - **More context = better newsletter.** Tell the agent your role, what you were investigating, and what matters. Vague prompts produce generic output.
-- **Ollama needs a capable model.** `qwen3:14b` works well. Smaller models (7b and below) tend to produce thin newsletters or malformed tool calls.
+- **Ollama needs a capable model.** `qwen3.6:35b` works well if you can run it. Smaller models (7b and below) tend to produce thin newsletters or malformed tool calls.
 - **PDF generation** requires Chrome to be running with the debug port open (it renders the HTML newsletter through Chrome).
 - **Podcast scripts** are generated on demand after the newsletter is ready — click 🎙 Podcast in the output header.
