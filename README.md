@@ -65,23 +65,25 @@ Then open [http://localhost:3002](http://localhost:3002).
 3. Fill in **"What were you reading about?"** — the more specific you are, the sharper the output. Example chips give you a quick start.
 4. Click **✨ Generate Newsletter**.
 5. The **Elicitor** may ask a couple of clarifying questions first. Answer them or skip.
-6. Watch the **Agent Activity** and **Pipeline Cost** panels update live. All four stages (Elicitor, Discovery, Research, Podcast) feed into these panels — costs are broken out per stage.
-7. The finished newsletter renders on the page. Use **⬇ HTML** or **⬇ PDF** to download, or **🎙 Podcast** to generate a script and a player with whatever speech synthesis voices your browser supports so you can listen  (streams live into the activity and cost panels).
+6. Watch the **Agent Activity** and **Pipeline Cost** panels update live. All four stages (Elicitor, Discovery, Research, Podcast) feed into these panels — costs and token counts are broken out per stage, with elapsed time and tokens/sec shown per step in the activity log.
+7. The finished newsletter renders on the page. Use **⬇ HTML** or **⬇ PDF** to download, **📁 Save** to archive the output to a timestamped `dist/` folder, or **🎙 Podcast** to generate a script and a player with whatever speech synthesis voices your browser supports (streams live into the activity and cost panels).
+8. The **🗑** button in the toolbar purges all cached files so the next run starts completely fresh.
 
 ### Advanced mode
 
 The **Agent Activity** and **Pipeline Cost** panels are visible in both modes. Click **⚙ Advanced** (top right) to also unlock:
 - Thinking output and raw tool calls in the activity log
 - Phase banners showing Discovery vs. Research progress
-- Live cost ticker in the header
+- Live cost ticker in the header with provider/model badge
 - Discovery Clusters panel (see how your tabs were grouped)
 - **Newsletter Style** prompt pane to control tone, depth, and framing
+- **Model Settings** panel — override the model, context window size (`num_ctx`), max output tokens, and thinking toggle independently for each agent (Elicitor, Discovery, Research, Podcast); settings are persisted in `cache/settings.json`
 - **⚡ Research Only** button to re-run just the writing phase against cached clusters
 - **↺ Clear & Redo** to wipe the cache and start fresh
 
 ### Caching
 
-Discovery results are cached in `cache/` so you can re-run the Research phase without re-fetching all your tabs. Use **↺ Clear & Redo** to force a full fresh run.
+Discovery results are cached in `cache/` so you can re-run the Research phase without re-fetching all your tabs. Use **↺ Clear & Redo** or the **🗑** purge button to force a full fresh run. Per-agent model settings are also stored in `cache/settings.json` and survive restarts.
 
 ## Configuration
 
@@ -98,6 +100,8 @@ Copy `.env.example` to `.env` and set the relevant variables:
 | `OLLAMA_FAST_MODEL` | `qwen3:4b` | Elicitor model |
 | `PORT` | `3002` | Server port |
 | `CHROME_DEBUG_PORT` | `9222` | Chrome DevTools port |
+
+Per-agent model overrides (model name, num_ctx, max tokens, thinking) are configured through the UI's **Model Settings** panel in Advanced mode and do not require an `.env` change.
 
 ## Project structure
 
@@ -117,11 +121,13 @@ public/
 htmlRenderer.js       — standalone HTML newsletter template
 server.js             — Express server + SSE pipeline
 cache/                — runtime output (gitignored)
+dist/                 — saved newsletter archives (gitignored)
 ```
 
 ## Tips
 
 - **More context = better newsletter.** Tell the agent your role, what you were investigating, and what matters. Vague prompts produce generic output.
-- **Ollama needs a capable model.** `qwen3.6:35b` works well if you can run it. Smaller models (7b and below) tend to produce thin newsletters or malformed tool calls.
+- **Ollama needs a capable model.** `qwen3:35b` works well if you can run it. Smaller models (7b and below) tend to produce thin newsletters or malformed tool calls. Use the **Model Settings** panel to tune `num_ctx` if the model runs out of context mid-run.
 - **PDF generation** requires Chrome to be running with the debug port open (it renders the HTML newsletter through Chrome).
 - **Podcast scripts** are generated on demand after the newsletter is ready — click 🎙 Podcast in the output header.
+- **Save to dist** (📁 Save) archives the HTML, PDF, JSON, and podcast script into a timestamped folder under `dist/` so you can keep a record of past newsletters without them being overwritten by the next run.
