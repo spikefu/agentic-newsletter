@@ -31,7 +31,7 @@ The Discovery Agent and Research Agent will use this context to decide how to cl
 
 Write 3–5 sentences. Capture: what the user was trying to accomplish, their role/background if mentioned, what to focus on, and any grouping or framing preferences. Be specific — incorporate details from their answers. Write as direct instructions to the agents in second person ("Focus on...", "The reader is...", "Group by..."). Do not repeat the questions — just synthesize the intent.`;
 
-export async function elicitContext(tabs, existingContext, send = () => {}) {
+export async function elicitContext(tabs, existingContext, send = () => {}, settings = {}) {
   send('phase', { phase: 0, label: 'Elicitor', message: 'Analyzing your tabs and context…' });
   send('status', { message: 'Elicitor: determining clarifying questions…' });
 
@@ -51,10 +51,13 @@ export async function elicitContext(tabs, existingContext, send = () => {}) {
     messages:  [{ role: 'user', content: userMsg }],
     model:     FAST_MODEL,
     maxTokens: 512,
-    thinking:  false
+    thinking:  false,
+    ...settings
   });
 
   const stepCost = calcCost(FAST_MODEL, result.usage);
+  const tps1 = result.elapsed_ms > 0 && (result.usage?.output_tokens || 0) > 0
+    ? Math.round(result.usage.output_tokens / (result.elapsed_ms / 1000)) : null;
   send('step_cost', {
     agent:              'elicitor',
     label:              'Elicitor · analysis',
@@ -64,7 +67,9 @@ export async function elicitContext(tabs, existingContext, send = () => {}) {
     cache_read_tokens:  result.usage?.cache_read_input_tokens     || 0,
     cache_write_tokens: result.usage?.cache_creation_input_tokens || 0,
     cost:               stepCost,
-    running_total:      stepCost
+    running_total:      stepCost,
+    elapsed_ms:         result.elapsed_ms || 0,
+    tokens_per_sec:     tps1
   });
 
   // qwen3 can embed <think>…</think> in msg.content even when think:false
@@ -83,7 +88,7 @@ export async function elicitContext(tabs, existingContext, send = () => {}) {
   };
 }
 
-export async function synthesizeContext(tabs, existingContext, qa, send = () => {}) {
+export async function synthesizeContext(tabs, existingContext, qa, send = () => {}, settings = {}) {
   const tabSummary = tabs.map((t, i) => `${i + 1}. "${t.title}" — ${t.url}`).join('\n');
   const qaText = qa
     .filter(item => item.a?.trim())
@@ -109,10 +114,13 @@ export async function synthesizeContext(tabs, existingContext, qa, send = () => 
     messages:  [{ role: 'user', content: userMsg }],
     model:     FAST_MODEL,
     maxTokens: 400,
-    thinking:  false
+    thinking:  false,
+    ...settings
   });
 
   const stepCost = calcCost(FAST_MODEL, result.usage);
+  const tps2 = result.elapsed_ms > 0 && (result.usage?.output_tokens || 0) > 0
+    ? Math.round(result.usage.output_tokens / (result.elapsed_ms / 1000)) : null;
   send('step_cost', {
     agent:              'elicitor',
     label:              'Elicitor · synthesis',
@@ -122,7 +130,9 @@ export async function synthesizeContext(tabs, existingContext, qa, send = () => 
     cache_read_tokens:  result.usage?.cache_read_input_tokens     || 0,
     cache_write_tokens: result.usage?.cache_creation_input_tokens || 0,
     cost:               stepCost,
-    running_total:      stepCost
+    running_total:      stepCost,
+    elapsed_ms:         result.elapsed_ms || 0,
+    tokens_per_sec:     tps2
   });
 
   return result.text?.trim() || existingContext || '';

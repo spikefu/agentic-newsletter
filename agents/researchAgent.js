@@ -38,6 +38,12 @@ HTML formatting for body fields:
 - Use <ul><li> for bullet lists when appropriate
 - Avoid headers inside body (the section headline is separate)
 
+Temporal language — this is important:
+- Do NOT use relative time references: "this week", "this month", "recently", "just announced", "lately", "as of late"
+- This newsletter is published on an ad hoc basis and may be read days or weeks after it was written — relative references will be wrong
+- Instead: use the specific date from the source ("In April 2026, ..."), or write in the timeless present ("X enables...", "The pattern is...")
+- The newsletter title and intro should NOT be anchored to a time period ("This week's top stories" → wrong; "The Agent Infrastructure Stack" → right)
+
 Call write_newsletter when your research is complete. Do not call it prematurely — make sure each section has enough substance first.`;
 }
 
@@ -122,7 +128,7 @@ const tools = [
   }
 ];
 
-export async function runResearchAgent(clusters, researchPrompt, send) {
+export async function runResearchAgent(clusters, researchPrompt, send, settings = {}) {
   send('phase', { phase: 2, label: 'Research', message: `Researching ${clusters.length} clusters and writing newsletter... (${PROVIDER})` });
 
   const clusterText = clusters.map(c => `
@@ -150,6 +156,7 @@ ${(s.key_points || []).map(p => `    • ${p}`).join('\n')}
   const MAX     = 25;
   let totalCost = 0;
   const visitedUrls = new Set();
+  let nudged    = false;
 
   while (iteration < MAX) {
     iteration++;
@@ -158,10 +165,12 @@ ${(s.key_points || []).map(p => `    • ${p}`).join('\n')}
     const system = buildSystem(researchPrompt);
     send('prompt', { step: iteration, agent: 'research', system, messages: JSON.parse(JSON.stringify(messages)) });
 
-    const result = await chat({ system, messages, tools, model: MODEL });
+    const result = await chat({ system, messages, tools, model: MODEL, ...settings });
 
     const stepCost = calcCost(MODEL, result.usage);
     totalCost += stepCost;
+    const tps = result.elapsed_ms > 0 && result.usage.output_tokens > 0
+      ? Math.round(result.usage.output_tokens / (result.elapsed_ms / 1000)) : null;
 
     send('step_cost', {
       agent:              'research',
@@ -172,17 +181,27 @@ ${(s.key_points || []).map(p => `    • ${p}`).join('\n')}
       cache_read_tokens:  result.usage.cache_read_input_tokens     || 0,
       cache_write_tokens: result.usage.cache_creation_input_tokens || 0,
       cost:               stepCost,
-      running_total:      totalCost
+      running_total:      totalCost,
+      elapsed_ms:         result.elapsed_ms || 0,
+      tokens_per_sec:     tps
     });
 
-    if (result.thinking) send('thinking',   { text: result.thinking.slice(0, 800) });
+    if (result.thinking) send('thinking',   { text: result.thinking });
     if (result.text)     send('agent_text', { text: result.text });
     for (const call of result.toolCalls)
       send('tool_call', { tool: call.name, url: call.input.url, query: call.input.query });
 
     messages.push(result.assistantMessage);
 
-    if (!result.toolCalls.length) break;
+    if (!result.toolCalls.length) {
+      if (!nudged && (result.thinking || result.text)) {
+        nudged = true;
+        send('status', { message: 'Nudging model to call write_newsletter…' });
+        messages.push({ role: 'user', content: 'You have finished your research. Please call write_newsletter now with the complete newsletter.' });
+        continue;
+      }
+      break;
+    }
 
     const contents = [];
     let newsletter = null;

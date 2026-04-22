@@ -10,6 +10,7 @@ import { elicitContext, synthesizeContext } from './agents/elicitorAgent.js';
 import { generatePodcastScript } from './agents/podcastAgent.js';
 import { renderNewsletterHTML } from './htmlRenderer.js';
 import { printToPDF } from './tools/browser.js';
+import { PROVIDER, MODEL, FAST_MODEL } from './lib/llm.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -21,6 +22,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 let _elicitorBuffer = [];
 
 const CACHE_DIR        = path.join(__dirname, 'cache');
+const DIST_DIR         = path.join(__dirname, 'dist');
 const CLUSTERS_CACHE   = path.join(CACHE_DIR, 'clusters.json');
 const NEWSLETTER_CACHE = path.join(CACHE_DIR, 'newsletter.json');
 const NEWSLETTER_HTML   = path.join(CACHE_DIR, 'newsletter.html');
@@ -28,8 +30,38 @@ const NEWSLETTER_PDF    = path.join(CACHE_DIR, 'newsletter.pdf');
 const NEWSLETTER_SCRIPT = path.join(CACHE_DIR, 'podcast-script.txt');
 const COST_CACHE        = path.join(CACHE_DIR, 'cost.json');
 const ELICITOR_CONTEXT  = path.join(CACHE_DIR, 'elicitor-context.txt');
+const SETTINGS_FILE    = path.join(CACHE_DIR, 'settings.json');
 const DISCOVERY_PROMPT = path.join(__dirname, 'discovery-prompt.md');
 const RESEARCH_PROMPT  = path.join(__dirname, 'research-prompt.md');
+
+const DEFAULT_SETTINGS = {
+  elicitor:  { numCtx: null, maxTokens: 512,   thinking: false, model: null },
+  discovery: { numCtx: null, maxTokens: 16000, thinking: true,  model: null },
+  research:  { numCtx: null, maxTokens: 16000, thinking: true,  model: null },
+  podcast:   { numCtx: null, maxTokens: 4000,  thinking: false, model: null }
+};
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+      return {
+        elicitor:  { ...DEFAULT_SETTINGS.elicitor,  ...saved.elicitor  },
+        discovery: { ...DEFAULT_SETTINGS.discovery, ...saved.discovery },
+        research:  { ...DEFAULT_SETTINGS.research,  ...saved.research  },
+        podcast:   { ...DEFAULT_SETTINGS.podcast,   ...saved.podcast   }
+      };
+    }
+  } catch (_) {}
+  return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+}
+
+// Strip null model so agents fall back to their own MODEL/FAST_MODEL default
+function resolveSettings(s) {
+  const out = { ...s };
+  if (!out.model) delete out.model;
+  return out;
+}
 
 // ─── Chrome tabs ─────────────────────────────────────────────────────────────
 
@@ -81,6 +113,31 @@ app.post('/api/prompts', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Settings API ────────────────────────────────────────────────────────────
+
+app.get('/api/settings', (req, res) => {
+  res.json({ ...loadSettings(), _meta: { provider: PROVIDER, model: MODEL, fastModel: FAST_MODEL } });
+});
+
+app.post('/api/settings', (req, res) => {
+  const { _meta, ...body } = req.body;
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(body, null, 2));
+  res.json({ ok: true });
+});
+
+app.get('/api/ollama-models', async (req, res) => {
+  const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  try {
+    const r = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    const data = await r.json();
+    const models = (data.models || []).map(m => m.name).sort();
+    res.json({ models });
+  } catch (e) {
+    res.json({ models: [], error: e.message });
+  }
+});
+
 // ─── Tabs API ────────────────────────────────────────────────────────────────
 
 app.get('/api/tabs', async (req, res) => {
@@ -114,7 +171,7 @@ app.post('/api/elicit', async (req, res) => {
   _elicitorBuffer = [];
   const bufferSend = (type, data) => _elicitorBuffer.push({ type, data });
   try {
-    const result = await elicitContext(tabs, existingContext || '', bufferSend);
+    const result = await elicitContext(tabs, existingContext || '', bufferSend, resolveSettings(loadSettings().elicitor));
     res.json({ ...result, tabs });
   } catch (e) {
     console.error('Elicitor error:', e.message);
@@ -127,7 +184,7 @@ app.post('/api/elicit/synthesize', async (req, res) => {
   const { tabs } = await getChromeTabs();
   const bufferSend = (type, data) => _elicitorBuffer.push({ type, data });
   try {
-    const synthesizedContext = await synthesizeContext(tabs, existingContext || '', qa || [], bufferSend);
+    const synthesizedContext = await synthesizeContext(tabs, existingContext || '', qa || [], bufferSend, resolveSettings(loadSettings().elicitor));
     fs.mkdirSync(CACHE_DIR, { recursive: true });
     fs.writeFileSync(ELICITOR_CONTEXT, synthesizedContext, 'utf8');
     res.json({ synthesizedContext });
@@ -181,7 +238,7 @@ app.get('/api/podcast-script/generate', async (req, res) => {
   }
 
   try {
-    const { script } = await generatePodcastScript(newsletter, send);
+    const { script } = await generatePodcastScript(newsletter, send, resolveSettings(loadSettings().podcast));
     fs.writeFileSync(NEWSLETTER_SCRIPT, script, 'utf8');
     send('done', { script });
   } catch (e) {
@@ -190,6 +247,44 @@ app.get('/api/podcast-script/generate', async (req, res) => {
   }
 
   res.end();
+});
+
+// ─── Purge cache ──────────────────────────────────────────────────────────────
+
+app.post('/api/purge', (req, res) => {
+  if (fs.existsSync(CACHE_DIR)) {
+    for (const f of fs.readdirSync(CACHE_DIR)) {
+      try { fs.unlinkSync(path.join(CACHE_DIR, f)); } catch (_) {}
+    }
+  }
+  res.json({ ok: true });
+});
+
+// ─── Save to dist ─────────────────────────────────────────────────────────────
+
+app.post('/api/save-dist', (req, res) => {
+  if (!fs.existsSync(NEWSLETTER_HTML)) {
+    return res.status(400).json({ error: 'No newsletter ready — run the pipeline first.' });
+  }
+
+  const ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const dir = path.join(DIST_DIR, ts);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const saved = [];
+  const copy  = (src, name) => {
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(dir, name));
+      saved.push(name);
+    }
+  };
+
+  copy(NEWSLETTER_HTML,   'newsletter.html');
+  copy(NEWSLETTER_PDF,    'newsletter.pdf');
+  copy(NEWSLETTER_CACHE,  'newsletter.json');
+  copy(NEWSLETTER_SCRIPT, 'podcast-script.txt');
+
+  res.json({ dir: path.relative(__dirname, dir).replace(/\\/g, '/'), saved });
 });
 
 // ─── SSE stream ───────────────────────────────────────────────────────────────
@@ -201,6 +296,8 @@ app.get('/api/stream', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
 
   const send = (type, data) => res.write(`data: ${JSON.stringify({ type, data })}\n\n`);
+
+  send('model_info', { provider: PROVIDER, model: MODEL, fast_model: FAST_MODEL });
 
   // ?redo=true  → clear all cache
   // ?phase=2    → skip discovery, run research only (uses cached clusters)
@@ -259,6 +356,7 @@ app.get('/api/stream', async (req, res) => {
     // ── Phase 1: Discovery ────────────────────────────────────────────────────
     let clusters;
     let discoveryCost = { total: 0 };
+    const agentSettings = loadSettings();
 
     if (!redo && fs.existsSync(CLUSTERS_CACHE)) {
       clusters = JSON.parse(fs.readFileSync(CLUSTERS_CACHE, 'utf8'));
@@ -266,7 +364,7 @@ app.get('/api/stream', async (req, res) => {
       send('clusters', { clusters });
       send('status',   { message: 'Discovery cache hit — running research phase...' });
     } else {
-      const result = await runDiscoveryAgent(discoveryPrompt, send);
+      const result = await runDiscoveryAgent(discoveryPrompt, send, resolveSettings(agentSettings.discovery));
       clusters      = result.clusters;
       discoveryCost = result.cost;
 
@@ -280,7 +378,7 @@ app.get('/api/stream', async (req, res) => {
     }
 
     // ── Phase 2: Research + Newsletter ───────────────────────────────────────
-    const { newsletter, cost: researchCost } = await runResearchAgent(clusters, researchPrompt, send);
+    const { newsletter, cost: researchCost } = await runResearchAgent(clusters, researchPrompt, send, resolveSettings(agentSettings.research));
 
     if (newsletter) {
       fs.mkdirSync(CACHE_DIR, { recursive: true });

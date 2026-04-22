@@ -533,6 +533,44 @@
   }
   .elicitor-skip:hover { color: var(--text); }
 
+  /* ── Model settings table ── */
+  .settings-table { width: 100%; border-collapse: collapse; }
+  .settings-table th {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--muted); font-weight: 600; padding: 0.4rem 1rem;
+    text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .settings-table td {
+    padding: 0.45rem 1rem; border-bottom: 1px solid var(--border);
+    font-size: 0.82rem; vertical-align: middle;
+  }
+  .settings-table tr:last-child td { border-bottom: none; }
+  .settings-table .st-agent { color: var(--muted); font-weight: 600; width: 8rem; }
+  .settings-table select, .settings-table input[type="number"] {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.2rem 0.45rem; font-size: 0.78rem; font-family: inherit;
+    outline: none; transition: border-color 0.15s;
+  }
+  .settings-table select:focus, .settings-table input[type="number"]:focus { border-color: var(--accent); }
+  .settings-table input[type="number"] { width: 90px; }
+  .settings-table .st-model-sel { min-width: 160px; }
+
+  /* ── Toggle switch ── */
+  .toggle { position: relative; display: inline-block; width: 34px; height: 18px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--border); border-radius: 18px; transition: background 0.18s;
+  }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle-slider::before {
+    content: ''; position: absolute;
+    width: 12px; height: 12px; border-radius: 50%; background: #fff;
+    left: 3px; top: 3px; transition: transform 0.18s;
+  }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+
   /* ── Cost card ── */
   .cost-row {
     display: flex; justify-content: space-between; align-items: center;
@@ -717,6 +755,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
       <button id="runBtn" class="btn btn-primary" onclick="run()"><span class="lbl-sim">✨ Generate Newsletter</span><span class="lbl-adv-inline">▶ Run</span></button>
       <button id="phase2Btn" class="btn btn-secondary" onclick="runPhase2()" style="display:none">⚡ Research Only</button>
       <button id="redoBtn" class="btn btn-danger" onclick="redo()" style="display:none">↺ Clear &amp; Redo</button>
+      <button id="purgeBtn" class="btn btn-danger" onclick="purge()" style="padding:0.5rem 0.75rem" title="Delete all cached files">🗑</button>
       <div id="phase1Banner" class="phase-banner p1">
         <span>⬤</span><span id="p1Msg">Discovery running...</span>
       </div>
@@ -724,6 +763,79 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
         <span>⬤</span><span id="p2Msg">Research running...</span>
       </div>
     </div>
+  </div>
+
+  <!-- Model settings (advanced mode only) -->
+  <div class="card adv" id="settingsCard">
+    <div class="card-header">
+      <span>Model Settings</span>
+      <span style="font-size:0.68rem;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">num_ctx · local models only</span>
+    </div>
+    <table class="settings-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Model</th>
+          <th>Context Window (num_ctx)</th>
+          <th>Max Output Tokens</th>
+          <th>Thinking</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="st-agent">Elicitor <span style="font-size:0.65rem;color:var(--muted);font-weight:400">fast</span></td>
+          <td><select id="ms_elic_model" class="st-model-sel" onchange="saveModelSettings()"><option value="">— loading… —</option></select></td>
+          <td><select id="ms_elic_ctx" onchange="saveModelSettings()">
+            <option value="">— model default —</option>
+            <option value="2048">2 K</option><option value="4096">4 K</option>
+            <option value="8192">8 K</option><option value="16384">16 K</option>
+            <option value="32768">32 K</option><option value="65536">64 K</option>
+            <option value="131072">128 K</option>
+          </select></td>
+          <td><input type="number" id="ms_elic_max" min="256" max="131072" step="256" onchange="saveModelSettings()"></td>
+          <td><label class="toggle"><input type="checkbox" id="ms_elic_think" onchange="saveModelSettings()"><span class="toggle-slider"></span></label></td>
+        </tr>
+        <tr>
+          <td class="st-agent">Discovery</td>
+          <td><select id="ms_disc_model" class="st-model-sel" onchange="saveModelSettings()"><option value="">— loading… —</option></select></td>
+          <td><select id="ms_disc_ctx" onchange="saveModelSettings()">
+            <option value="">— model default —</option>
+            <option value="2048">2 K</option><option value="4096">4 K</option>
+            <option value="8192">8 K</option><option value="16384">16 K</option>
+            <option value="32768">32 K</option><option value="65536">64 K</option>
+            <option value="131072">128 K</option>
+          </select></td>
+          <td><input type="number" id="ms_disc_max" min="256" max="131072" step="256" onchange="saveModelSettings()"></td>
+          <td><label class="toggle"><input type="checkbox" id="ms_disc_think" onchange="saveModelSettings()"><span class="toggle-slider"></span></label></td>
+        </tr>
+        <tr>
+          <td class="st-agent">Research</td>
+          <td><select id="ms_res_model" class="st-model-sel" onchange="saveModelSettings()"><option value="">— loading… —</option></select></td>
+          <td><select id="ms_res_ctx" onchange="saveModelSettings()">
+            <option value="">— model default —</option>
+            <option value="2048">2 K</option><option value="4096">4 K</option>
+            <option value="8192">8 K</option><option value="16384">16 K</option>
+            <option value="32768">32 K</option><option value="65536">64 K</option>
+            <option value="131072">128 K</option>
+          </select></td>
+          <td><input type="number" id="ms_res_max" min="256" max="131072" step="256" onchange="saveModelSettings()"></td>
+          <td><label class="toggle"><input type="checkbox" id="ms_res_think" onchange="saveModelSettings()"><span class="toggle-slider"></span></label></td>
+        </tr>
+        <tr>
+          <td class="st-agent">Podcast</td>
+          <td><select id="ms_pod_model" class="st-model-sel" onchange="saveModelSettings()"><option value="">— loading… —</option></select></td>
+          <td><select id="ms_pod_ctx" onchange="saveModelSettings()">
+            <option value="">— model default —</option>
+            <option value="2048">2 K</option><option value="4096">4 K</option>
+            <option value="8192">8 K</option><option value="16384">16 K</option>
+            <option value="32768">32 K</option><option value="65536">64 K</option>
+            <option value="131072">128 K</option>
+          </select></td>
+          <td><input type="number" id="ms_pod_max" min="256" max="131072" step="256" onchange="saveModelSettings()"></td>
+          <td><label class="toggle"><input type="checkbox" id="ms_pod_think" onchange="saveModelSettings()"><span class="toggle-slider"></span></label></td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- Simple mode: progress steps -->
@@ -760,7 +872,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   <!-- Activity log (advanced mode) -->
   <div class="card" id="activityCard" style="display:none">
     <div class="card-header">
-      <span>Agent Activity</span>
+      <span>Agent Activity <span id="modelBadge" class="badge" style="display:none;margin-left:0.5rem"></span></span>
       <span id="feedStatus" style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0"></span>
     </div>
     <div class="feed-log" id="feedLog"></div>
@@ -783,6 +895,8 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
         <a id="htmlLink" href="/api/newsletter.html" target="_blank" class="btn btn-secondary" style="padding:0.25rem 0.7rem;font-size:0.72rem;text-decoration:none">⬇ HTML</a>
         <a id="pdfLink"  href="/api/newsletter.pdf"  class="btn btn-secondary" style="padding:0.25rem 0.7rem;font-size:0.72rem;text-decoration:none;display:none">⬇ PDF</a>
         <button id="podcastBtn" class="btn btn-secondary" onclick="startPodcast()" style="padding:0.25rem 0.7rem;font-size:0.72rem">🎙 Podcast</button>
+        <button id="saveDistBtn" class="btn btn-secondary" onclick="saveToDist()" style="padding:0.25rem 0.7rem;font-size:0.72rem">📁 Save</button>
+        <span id="saveDistMsg" style="font-size:0.68rem;color:var(--green);font-family:monospace;display:none"></span>
       </span>
     </div>
     <div id="newsletterOut"></div>
@@ -858,6 +972,10 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   let _discCostRunning     = 0;
   let _resCostRunning      = 0;
   let _podcastCostRunning  = 0;
+  let _elicTokIn = 0, _elicTokOut = 0;
+  let _discTokIn = 0, _discTokOut = 0;
+  let _resTokIn  = 0, _resTokOut  = 0;
+  let _podTokIn  = 0, _podTokOut  = 0;
   let es                   = null;
   let _speechScript        = '';
 
@@ -923,7 +1041,8 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   // ── Load prompts and status on start ────────────────────────────────────────
 
   (async () => {
-    loadTabs();   // populate tab list immediately
+    loadTabs();          // populate tab list immediately
+    loadModelSettings(); // populate settings card (fire-and-forget)
     try {
       const [promptsRes, statusRes] = await Promise.all([
         fetch('/api/prompts'),
@@ -1020,6 +1139,65 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     savePrompts();
   }
 
+  // ── Model settings ───────────────────────────────────────────────────────────
+
+  async function loadModelSettings() {
+    try {
+      const [s, mr] = await Promise.all([
+        fetch('/api/settings').then(r => r.json()),
+        fetch('/api/ollama-models').then(r => r.json()).catch(() => ({ models: [] }))
+      ]);
+
+      const meta   = s._meta  || {};
+      const models = mr.models || [];
+
+      // Default model labels per agent (shown in the "env default" option)
+      const defaultLabel = {
+        elicitor:  meta.fastModel || 'fast model',
+        discovery: meta.model     || 'main model',
+        research:  meta.model     || 'main model',
+        podcast:   meta.model     || 'main model'
+      };
+
+      const map           = { elicitor: 'elic', discovery: 'disc', research: 'res', podcast: 'pod' };
+      const thinkDefaults = { elicitor: false, discovery: true, research: true, podcast: false };
+
+      for (const [agent, pfx] of Object.entries(map)) {
+        // Model select — rebuild options each load so list is always fresh
+        const modelEl = document.getElementById(`ms_${pfx}_model`);
+        if (modelEl) {
+          const saved = s[agent]?.model || '';
+          modelEl.innerHTML =
+            `<option value="">— default (${esc(defaultLabel[agent])}) —</option>` +
+            models.map(m => `<option value="${esc(m)}"${m === saved ? ' selected' : ''}>${esc(m)}</option>`).join('');
+          if (!models.length) modelEl.innerHTML = `<option value="">— default (${esc(defaultLabel[agent])}) —</option>`;
+        }
+
+        const ctxEl   = document.getElementById(`ms_${pfx}_ctx`);
+        const maxEl   = document.getElementById(`ms_${pfx}_max`);
+        const thinkEl = document.getElementById(`ms_${pfx}_think`);
+        if (ctxEl)   ctxEl.value     = s[agent]?.numCtx   ?? '';
+        if (maxEl)   maxEl.value     = s[agent]?.maxTokens ?? '';
+        if (thinkEl) thinkEl.checked = s[agent]?.thinking  ?? thinkDefaults[agent];
+      }
+    } catch (_) {}
+  }
+
+  async function saveModelSettings() {
+    const toNum  = id => { const n = parseInt(document.getElementById(id)?.value); return isNaN(n) || n <= 0 ? null : n; };
+    const toBool = id => document.getElementById(id)?.checked ?? false;
+    const toModel = id => document.getElementById(id)?.value  || null;
+    const s = {
+      elicitor:  { model: toModel('ms_elic_model'), numCtx: toNum('ms_elic_ctx'), maxTokens: parseInt(document.getElementById('ms_elic_max')?.value) || 512,   thinking: toBool('ms_elic_think') },
+      discovery: { model: toModel('ms_disc_model'), numCtx: toNum('ms_disc_ctx'), maxTokens: parseInt(document.getElementById('ms_disc_max')?.value) || 16000, thinking: toBool('ms_disc_think') },
+      research:  { model: toModel('ms_res_model'),  numCtx: toNum('ms_res_ctx'),  maxTokens: parseInt(document.getElementById('ms_res_max')?.value)  || 16000, thinking: toBool('ms_res_think')  },
+      podcast:   { model: toModel('ms_pod_model'),  numCtx: toNum('ms_pod_ctx'),  maxTokens: parseInt(document.getElementById('ms_pod_max')?.value)  || 4000,  thinking: toBool('ms_pod_think')  }
+    };
+    try {
+      await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) });
+    } catch (_) {}
+  }
+
   // ── Auto-save prompts on blur ────────────────────────────────────────────────
 
   ['discoveryPrompt', 'researchPrompt'].forEach(id => {
@@ -1099,6 +1277,20 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     startStream('/api/stream?redo=true');
   }
 
+  async function purge() {
+    const btn = document.getElementById('purgeBtn');
+    btn.disabled = true;
+    try {
+      await fetch('/api/purge', { method: 'POST' });
+      clearUI();
+      document.getElementById('activityCard').style.display  = 'none';
+      document.getElementById('progressCard').style.display  = 'none';
+      document.getElementById('phase2Btn').style.display     = 'none';
+      document.getElementById('redoBtn').style.display       = 'none';
+    } catch (_) {}
+    btn.disabled = false;
+  }
+
   function clearUI() {
     document.getElementById('feedLog').innerHTML      = '';
     document.getElementById('clustersGrid').innerHTML = '';
@@ -1113,6 +1305,10 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     _discCostRunning     = 0;
     _resCostRunning      = 0;
     _podcastCostRunning  = 0;
+    _elicTokIn = 0; _elicTokOut = 0;
+    _discTokIn = 0; _discTokOut = 0;
+    _resTokIn  = 0; _resTokOut  = 0;
+    _podTokIn  = 0; _podTokOut  = 0;
     document.getElementById('liveCost').style.display = 'none';
     resetSteps();
     document.getElementById('activityCard').style.display = '';
@@ -1220,6 +1416,18 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
           break;
         }
 
+        case 'model_info': {
+          const badge = document.getElementById('modelBadge');
+          badge.textContent = `${data.provider} · ${data.model}`;
+          badge.style.display = 'inline';
+          if (data.provider === 'ollama') {
+            badge.style.background   = 'rgba(126,231,135,0.12)';
+            badge.style.color        = 'var(--green)';
+            badge.style.borderColor  = 'rgba(126,231,135,0.25)';
+          }
+          break;
+        }
+
         case 'step_cost': {
           grandTotal = data.running_total;
           if (isAdv()) {
@@ -1227,14 +1435,26 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
             lc.style.display = 'inline';
             lc.textContent = fmtCost(grandTotal);
           }
-          if      (data.agent === 'elicitor') _elicitorCostRunning += data.cost;
-          else if (data.agent === 'discovery') _discCostRunning     += data.cost;
-          else if (data.agent === 'research')  _resCostRunning      += data.cost;
+          if (data.agent === 'elicitor') {
+            _elicitorCostRunning += data.cost;
+            _elicTokIn  += data.input_tokens  || 0;
+            _elicTokOut += data.output_tokens || 0;
+          } else if (data.agent === 'discovery') {
+            _discCostRunning += data.cost;
+            _discTokIn  += data.input_tokens  || 0;
+            _discTokOut += data.output_tokens || 0;
+          } else if (data.agent === 'research') {
+            _resCostRunning += data.cost;
+            _resTokIn  += data.input_tokens  || 0;
+            _resTokOut += data.output_tokens || 0;
+          }
           updateCostCardRunning();
           const toks = `${fmtTok(data.input_tokens)}↑ ${fmtTok(data.output_tokens)}↓`
             + (data.cache_read_tokens  ? ` ${fmtTok(data.cache_read_tokens)}⚡`  : '')
             + (data.cache_write_tokens ? ` ${fmtTok(data.cache_write_tokens)}✎` : '');
-          addLog('step_cost', `${data.label} · ${fmtCost(data.cost)} · ${toks}`);
+          const perf = data.elapsed_ms    ? ` · ${(data.elapsed_ms / 1000).toFixed(1)}s`  : '';
+          const tps  = data.tokens_per_sec ? ` · ${data.tokens_per_sec} tok/s` : '';
+          addLog('step_cost', `${data.label} · ${fmtCost(data.cost)} · ${toks}${perf}${tps}`);
           break;
         }
 
@@ -1272,6 +1492,27 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   }
 
   // ── Download helpers ─────────────────────────────────────────────────────────
+
+  async function saveToDist() {
+    const btn = document.getElementById('saveDistBtn');
+    const msg = document.getElementById('saveDistMsg');
+    btn.disabled = true;
+    msg.style.display = 'none';
+    try {
+      const res  = await fetch('/api/save-dist', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Save failed');
+      msg.textContent = `Saved → ${data.dir}  (${data.saved.join(', ')})`;
+      msg.style.display = 'inline';
+      setTimeout(() => { msg.style.display = 'none'; }, 8000);
+    } catch (e) {
+      msg.style.display = 'inline';
+      msg.style.color = 'var(--red)';
+      msg.textContent = e.message;
+      setTimeout(() => { msg.style.display = 'none'; msg.style.color = 'var(--green)'; }, 5000);
+    }
+    btn.disabled = false;
+  }
 
   function showDownloads(htmlUrl, pdfUrl) {
     const btns = document.getElementById('downloadBtns');
@@ -1345,30 +1586,56 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
   // ── Cost card ────────────────────────────────────────────────────────────────
 
+  function costRow(label, cost, tokIn, tokOut) {
+    const tokHtml = (tokIn + tokOut) > 0
+      ? `<span style="font-family:monospace;font-size:0.7rem;color:var(--muted)">${fmtTok(tokIn)}↑ ${fmtTok(tokOut)}↓</span>`
+      : '';
+    return `<div class="cost-row">
+      <span class="cost-label">${label}</span>
+      <span style="display:flex;gap:0.75rem;align-items:center">${tokHtml}<span class="cost-val">${fmtCost(cost)}</span></span>
+    </div>`;
+  }
+
   function updateCostCardRunning() {
     const card  = document.getElementById('costCard');
     const rows  = document.getElementById('costRows');
-    const total = _elicitorCostRunning + _discCostRunning + _resCostRunning + _podcastCostRunning;
+    const total    = _elicitorCostRunning + _discCostRunning + _resCostRunning + _podcastCostRunning;
+    const totTokIn  = _elicTokIn + _discTokIn + _resTokIn + _podTokIn;
+    const totTokOut = _elicTokOut + _discTokOut + _resTokOut + _podTokOut;
     rows.innerHTML = `
-      ${_elicitorCostRunning > 0 ? `<div class="cost-row"><span class="cost-label">Elicitor</span><span class="cost-val">${fmtCost(_elicitorCostRunning)}</span></div>` : ''}
-      <div class="cost-row"><span class="cost-label">Discovery</span><span class="cost-val">${fmtCost(_discCostRunning)}</span></div>
-      ${_resCostRunning    > 0 ? `<div class="cost-row"><span class="cost-label">Research</span><span class="cost-val">${fmtCost(_resCostRunning)}</span></div>` : ''}
-      ${_podcastCostRunning > 0 ? `<div class="cost-row"><span class="cost-label">Podcast</span><span class="cost-val">${fmtCost(_podcastCostRunning)}</span></div>` : ''}
-      <div class="cost-row"><span class="cost-label">Running Total</span><span class="cost-val total">${fmtCost(total)}</span></div>
+      ${_elicitorCostRunning > 0 || _elicTokIn > 0 ? costRow('Elicitor',  _elicitorCostRunning, _elicTokIn, _elicTokOut) : ''}
+      ${costRow('Discovery', _discCostRunning, _discTokIn, _discTokOut)}
+      ${_resCostRunning > 0   || _resTokIn  > 0 ? costRow('Research', _resCostRunning,  _resTokIn,  _resTokOut)  : ''}
+      ${_podcastCostRunning > 0 || _podTokIn > 0 ? costRow('Podcast',  _podcastCostRunning, _podTokIn, _podTokOut) : ''}
+      <div class="cost-row" style="border-top:1px solid var(--border)">
+        <span class="cost-label">Running Total</span>
+        <span style="display:flex;gap:0.75rem;align-items:center">
+          ${(totTokIn + totTokOut) > 0 ? `<span style="font-family:monospace;font-size:0.7rem;color:var(--muted)">${fmtTok(totTokIn)}↑ ${fmtTok(totTokOut)}↓</span>` : ''}
+          <span class="cost-val total">${fmtCost(total)}</span>
+        </span>
+      </div>
     `;
     card.style.display = '';
   }
 
   function renderCostCard(cost) {
-    const card       = document.getElementById('costCard');
-    const rows       = document.getElementById('costRows');
-    const grandTotal = _elicitorCostRunning + (cost.grand_total || 0) + _podcastCostRunning;
+    const card      = document.getElementById('costCard');
+    const rows      = document.getElementById('costRows');
+    const gt        = _elicitorCostRunning + (cost.grand_total || 0) + _podcastCostRunning;
+    const totTokIn  = _elicTokIn + _discTokIn + _resTokIn + _podTokIn;
+    const totTokOut = _elicTokOut + _discTokOut + _resTokOut + _podTokOut;
     rows.innerHTML = `
-      ${_elicitorCostRunning  > 0 ? `<div class="cost-row"><span class="cost-label">Elicitor</span><span class="cost-val">${fmtCost(_elicitorCostRunning)}</span></div>` : ''}
-      <div class="cost-row"><span class="cost-label">Discovery</span><span class="cost-val">${fmtCost(cost.discovery?.total || 0)}</span></div>
-      <div class="cost-row"><span class="cost-label">Research</span><span class="cost-val">${fmtCost(cost.research?.total || 0)}</span></div>
-      ${_podcastCostRunning   > 0 ? `<div class="cost-row"><span class="cost-label">Podcast</span><span class="cost-val">${fmtCost(_podcastCostRunning)}</span></div>` : ''}
-      <div class="cost-row"><span class="cost-label">Grand Total</span><span class="cost-val total">${fmtCost(grandTotal)}</span></div>
+      ${_elicitorCostRunning > 0 || _elicTokIn > 0 ? costRow('Elicitor',  _elicitorCostRunning, _elicTokIn,  _elicTokOut)  : ''}
+      ${costRow('Discovery', cost.discovery?.total || 0, _discTokIn, _discTokOut)}
+      ${costRow('Research',  cost.research?.total  || 0, _resTokIn,  _resTokOut)}
+      ${_podcastCostRunning > 0 || _podTokIn > 0 ? costRow('Podcast', _podcastCostRunning, _podTokIn, _podTokOut) : ''}
+      <div class="cost-row" style="border-top:1px solid var(--border)">
+        <span class="cost-label">Grand Total</span>
+        <span style="display:flex;gap:0.75rem;align-items:center">
+          ${(totTokIn + totTokOut) > 0 ? `<span style="font-family:monospace;font-size:0.7rem;color:var(--muted)">${fmtTok(totTokIn)}↑ ${fmtTok(totTokOut)}↓</span>` : ''}
+          <span class="cost-val total">${fmtCost(gt)}</span>
+        </span>
+      </div>
     `;
     card.style.display = '';
   }
@@ -1557,11 +1824,15 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
           break;
         case 'step_cost': {
           _podcastCostRunning += data.cost;
+          _podTokIn  += data.input_tokens  || 0;
+          _podTokOut += data.output_tokens || 0;
           updateCostCardRunning();
           const toks = `${fmtTok(data.input_tokens)}↑ ${fmtTok(data.output_tokens)}↓`
             + (data.cache_read_tokens  ? ` ${fmtTok(data.cache_read_tokens)}⚡`  : '')
             + (data.cache_write_tokens ? ` ${fmtTok(data.cache_write_tokens)}✎` : '');
-          addLog('step_cost', `${data.label} · ${fmtCost(data.cost)} · ${toks}`);
+          const perf = data.elapsed_ms    ? ` · ${(data.elapsed_ms / 1000).toFixed(1)}s`  : '';
+          const tps  = data.tokens_per_sec ? ` · ${data.tokens_per_sec} tok/s` : '';
+          addLog('step_cost', `${data.label} · ${fmtCost(data.cost)} · ${toks}${perf}${tps}`);
           break;
         }
         case 'done':

@@ -6,15 +6,14 @@ const SYSTEM = `You are a content curator and analyst with access to a web brows
 Your job:
 1. Read the user's prompt — it contains URLs and context about what they want analyzed
 2. Fetch EVERY URL mentioned using fetch_page (do this before grouping anything)
-3. For each page: extract the title, main topic, publication date, 3–5 key insights, and any notable downstream links worth following
+3. For each page: Read the whole page including HTML metadata. Extract the title, main topic, publication date, 3–5 key insights, and any notable downstream links worth following
 4. Identify themes and patterns across ALL fetched content
 5. Group everything into 3–8 logical thematic clusters
 6. When all URLs are fetched and content is analyzed, call submit_clusters
 
 Date handling:
 - Fetched page content may begin with [Published: <date>] — if so, record that exact date string in published_date
-- If no [Published: ...] line appears, set published_date to null
-- Do NOT guess or infer dates; only record what is explicitly present
+- If no [Published: ...] line appears, scan the page content for a date cue at the top or bottom, or on forum style pages things like 1h ago, 2d ago etc. and use the context in the page to determine if that is the likely publish date.
 
 Rules:
 - Fetch every URL the user provided, even if you think you know what it contains
@@ -72,7 +71,7 @@ const tools = [
   }
 ];
 
-export async function runDiscoveryAgent(discoveryPrompt, send) {
+export async function runDiscoveryAgent(discoveryPrompt, send, settings = {}) {
   send('phase', { phase: 1, label: 'Discovery', message: `Fetching URLs and identifying themes... (${PROVIDER})` });
 
   const visitedUrls = new Set();
@@ -81,16 +80,19 @@ export async function runDiscoveryAgent(discoveryPrompt, send) {
   let iteration  = 0;
   const MAX      = 30;
   let totalCost  = 0;
+  let nudged     = false;
 
   while (iteration < MAX) {
     iteration++;
     send('status', { message: `Discovery step ${iteration}...` });
     send('prompt', { step: iteration, agent: 'discovery', system: SYSTEM, messages: JSON.parse(JSON.stringify(messages)) });
 
-    const result = await chat({ system: SYSTEM, messages, tools, model: MODEL });
+    const result = await chat({ system: SYSTEM, messages, tools, model: MODEL, ...settings });
 
     const stepCost = calcCost(MODEL, result.usage);
     totalCost += stepCost;
+    const tps = result.elapsed_ms > 0 && result.usage.output_tokens > 0
+      ? Math.round(result.usage.output_tokens / (result.elapsed_ms / 1000)) : null;
 
     send('step_cost', {
       agent:              'discovery',
@@ -101,17 +103,27 @@ export async function runDiscoveryAgent(discoveryPrompt, send) {
       cache_read_tokens:  result.usage.cache_read_input_tokens     || 0,
       cache_write_tokens: result.usage.cache_creation_input_tokens || 0,
       cost:               stepCost,
-      running_total:      totalCost
+      running_total:      totalCost,
+      elapsed_ms:         result.elapsed_ms || 0,
+      tokens_per_sec:     tps
     });
 
-    if (result.thinking) send('thinking',   { text: result.thinking.slice(0, 800) });
+    if (result.thinking) send('thinking',   { text: result.thinking });
     if (result.text)     send('agent_text', { text: result.text });
     for (const call of result.toolCalls)
       send('tool_call', { tool: call.name, url: call.input.url });
 
     messages.push(result.assistantMessage);
 
-    if (!result.toolCalls.length) break;
+    if (!result.toolCalls.length) {
+      if (!nudged && (result.thinking || result.text)) {
+        nudged = true;
+        send('status', { message: 'Nudging model to call submit_clusters…' });
+        messages.push({ role: 'user', content: 'You have finished analyzing the content. Please call submit_clusters now with your thematic cluster groupings.' });
+        continue;
+      }
+      break;
+    }
 
     const contents = [];
     let clusters   = null;
@@ -133,8 +145,13 @@ export async function runDiscoveryAgent(discoveryPrompt, send) {
         if (typeof clusters === 'string') {
           try { clusters = JSON.parse(clusters); } catch { clusters = null; }
         }
-        send('clusters', { clusters });
-        contents.push(JSON.stringify({ success: true, cluster_count: clusters.length }));
+        if (!Array.isArray(clusters) || clusters.length === 0) {
+          contents.push(JSON.stringify({ error: 'submit_clusters requires a non-empty clusters array — please retry with your complete thematic groupings.' }));
+          clusters = null;
+        } else {
+          send('clusters', { clusters });
+          contents.push(JSON.stringify({ success: true, cluster_count: clusters.length }));
+        }
       } else {
         contents.push('Unknown tool.');
       }

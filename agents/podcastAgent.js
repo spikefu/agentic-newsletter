@@ -4,7 +4,7 @@ function stripHtml(html) {
   return (html || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 }
 
-export async function generatePodcastScript(newsletter, send = () => {}) {
+export async function generatePodcastScript(newsletter, send = () => {}, settings = {}) {
   send('phase', { phase: 3, label: 'Podcast', message: 'Generating podcast script…' });
   send('status', { message: 'Writing podcast script…' });
 
@@ -37,11 +37,14 @@ Rules:
   const result = await chat({
     system,
     messages: [{ role: 'user', content: `Convert this newsletter content into a podcast script:\n\n${content}` }],
-    model:   MODEL,
-    thinking: false
+    model:    MODEL,
+    thinking: false,
+    ...settings
   });
 
   const cost = calcCost(MODEL, result.usage);
+  const tps = result.elapsed_ms > 0 && (result.usage?.output_tokens || 0) > 0
+    ? Math.round(result.usage.output_tokens / (result.elapsed_ms / 1000)) : null;
   send('step_cost', {
     agent:              'podcast',
     label:              'Podcast · script',
@@ -51,7 +54,9 @@ Rules:
     cache_read_tokens:  result.usage?.cache_read_input_tokens     || 0,
     cache_write_tokens: result.usage?.cache_creation_input_tokens || 0,
     cost,
-    running_total:      cost
+    running_total:      cost,
+    elapsed_ms:         result.elapsed_ms || 0,
+    tokens_per_sec:     tps
   });
 
   if (result.thinking) send('thinking', { text: result.thinking.slice(0, 600) });
