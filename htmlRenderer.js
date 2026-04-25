@@ -60,7 +60,7 @@ body {
   margin-bottom: 0.6em;
 }
 .nl-title {
-  font-size: 2.2em;
+  font-size: 1.75em;
   font-weight: 700;
   line-height: 1.15;
   color: rgb(15, 18, 25);
@@ -96,7 +96,7 @@ body {
   margin-bottom: 0.4em;
 }
 .section-headline {
-  font-size: 1.45em;
+  font-size: 1.2em;
   font-weight: 700;
   line-height: 1.2;
   color: rgb(15, 18, 25);
@@ -153,8 +153,25 @@ body {
 .nl-closing p { margin-bottom: 0.75em; }
 .nl-closing p:last-child { margin-bottom: 0; }
 
+/* ── Site nav ── */
+.site-nav {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.25em 2em 0;
+}
+.site-nav a {
+  font-size: 0.78em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(96, 115, 159);
+  text-decoration: none;
+}
+.site-nav a:hover { color: #2337ff; }
+
 /* ── Print ── */
 @media print {
+  .site-nav { display: none; }
   .wrapper { padding: 0; }
   .nl-section { page-break-inside: avoid; }
 }
@@ -187,6 +204,7 @@ export function renderNewsletterHTML(newsletter) {
   <style>${CSS}</style>
 </head>
 <body>
+  <nav class="site-nav"><a href="/">← Home</a></nav>
   <div class="wrapper">
     <header class="nl-header">
       <div class="eyebrow">Newsletter</div>
