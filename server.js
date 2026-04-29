@@ -2,7 +2,9 @@ import 'dotenv/config';
 import http from 'http';
 import express from 'express';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { runDiscoveryAgent } from './agents/discoveryAgent.js';
 import { runResearchAgent  } from './agents/researchAgent.js';
@@ -66,6 +68,55 @@ function resolveSettings(s) {
 // ─── Chrome tabs ─────────────────────────────────────────────────────────────
 
 const CHROME_PORT = parseInt(process.env.CHROME_DEBUG_PORT || '9222', 10);
+
+function findChromePath() {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+  if (process.platform === 'win32') {
+    return [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe')
+    ].find(p => fs.existsSync(p));
+  }
+  if (process.platform === 'darwin') {
+    const mac = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    return fs.existsSync(mac) ? mac : null;
+  }
+  return 'google-chrome';
+}
+
+function isChromeDebugRunning() {
+  return new Promise(resolve => {
+    const req = http.get(`http://localhost:${CHROME_PORT}/json/version`, res => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(1000, () => { req.destroy(); resolve(false); });
+  });
+}
+
+async function launchChrome() {
+  if (await isChromeDebugRunning()) {
+    console.log(`Chrome already listening on debug port ${CHROME_PORT}`);
+    return;
+  }
+  const chromePath = findChromePath();
+  if (!chromePath) {
+    console.warn(`Chrome binary not found — start it manually with --remote-debugging-port=${CHROME_PORT}`);
+    return;
+  }
+  // Separate profile so debug mode works even when the user's regular Chrome is open.
+  const userDataDir = path.join(__dirname, '.chrome-debug-profile');
+  const child = spawn(chromePath, [
+    `--remote-debugging-port=${CHROME_PORT}`,
+    `--user-data-dir=${userDataDir}`,
+    '--no-first-run',
+    '--no-default-browser-check'
+  ], { detached: true, stdio: 'ignore' });
+  child.unref();
+  console.log(`Launched Chrome on debug port ${CHROME_PORT} (pid ${child.pid}, profile ${userDataDir})`);
+}
 
 function getChromeTabs() {
   return new Promise((resolve) => {
@@ -420,4 +471,7 @@ app.get('/api/stream', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => console.log(`Newsletter Agent → http://localhost:${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`Newsletter Agent → http://localhost:${PORT}`);
+  await launchChrome();
+});
