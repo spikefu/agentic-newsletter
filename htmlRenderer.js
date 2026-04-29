@@ -66,6 +66,13 @@ body {
   color: rgb(15, 18, 25);
   margin-bottom: 0.4em;
 }
+.nl-subtitle {
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: rgb(96, 115, 159);
+  margin-bottom: 0.6em;
+}
+.nl-subtitle a { color: #2337ff; }
 .dateline {
   font-size: 0.8em;
   color: rgb(96, 115, 159);
@@ -153,6 +160,28 @@ body {
 .nl-closing p { margin-bottom: 0.75em; }
 .nl-closing p:last-child { margin-bottom: 0; }
 
+/* ── References ── */
+.nl-references {
+  padding-top: 2em;
+  margin-top: 2em;
+  border-top: 1px solid rgb(229, 233, 240);
+  font-size: 0.85em;
+  line-height: 1.7;
+  color: rgb(34, 41, 57);
+}
+.nl-references-label {
+  font-size: 0.72em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgb(96, 115, 159);
+  margin-bottom: 0.75em;
+}
+.nl-references a { color: #2337ff; }
+.nl-references ul, .nl-references ol { margin: 0 0 0 1.5em; }
+.nl-references li { margin-bottom: 0.3em; }
+.nl-references p { margin-bottom: 0.5em; }
+
 /* ── Site nav ── */
 .site-nav {
   max-width: 720px;
@@ -209,11 +238,13 @@ export function renderNewsletterHTML(newsletter) {
     <header class="nl-header">
       <div class="eyebrow">Newsletter</div>
       <h1 class="nl-title">${esc(newsletter.title || 'Newsletter')}</h1>
+      ${newsletter.subtitle ? `<div class="nl-subtitle">${newsletter.subtitle}</div>` : ''}
       <div class="dateline">${date}</div>
     </header>
     <div class="nl-intro">${newsletter.intro || ''}</div>
     ${sectionsHtml}
     ${newsletter.closing ? `<div class="nl-closing">${newsletter.closing}</div>` : ''}
+    ${newsletter.references ? `<div class="nl-references"><div class="nl-references-label">References</div>${newsletter.references}</div>` : ''}
   </div>
 </body>
 </html>`;

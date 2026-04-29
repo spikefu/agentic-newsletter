@@ -354,6 +354,14 @@
     margin-bottom: 0.5rem;
     font-family: Georgia, serif;
   }
+  .nl-subtitle {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 0.6rem;
+  }
+  .nl-subtitle a { color: rgba(255,255,255,0.85); text-decoration: underline; }
   .nl-dateline {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 0.75rem;
@@ -452,6 +460,27 @@
   }
   .nl-closing p { margin-bottom: 0.75rem; }
   .nl-closing p:last-child { margin-bottom: 0; }
+
+  .nl-references {
+    padding: 1.5rem 2.5rem 2rem;
+    border-top: 1px solid #e8e8e8;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: #444;
+  }
+  .nl-references-label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    margin-bottom: 0.75rem;
+  }
+  .nl-references a { color: #1a56db; }
+  .nl-references ul, .nl-references ol { margin: 0 0 0 1.25rem; }
+  .nl-references li { margin-bottom: 0.3rem; }
+  .nl-references p { margin-bottom: 0.5rem; }
 
   /* ── Download buttons ── */
   .download-btns { display: flex; }
@@ -1572,11 +1601,13 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
         <div class="nl-header">
           <div class="nl-eyebrow">Intelligence Brief</div>
           <h1 class="nl-title">${esc(nl.title || 'Newsletter')}</h1>
+          ${nl.subtitle ? `<div class="nl-subtitle">${nl.subtitle}</div>` : ''}
           <div class="nl-dateline">${date}</div>
         </div>
         <div class="nl-intro">${nl.intro || ''}</div>
         ${sectionsHtml}
         ${nl.closing ? `<div class="nl-closing">${nl.closing}</div>` : ''}
+        ${nl.references ? `<div class="nl-references"><div class="nl-references-label">References</div>${nl.references}</div>` : ''}
       </div>
     `;
 

@@ -82,6 +82,10 @@ const tools = [
               type: 'string',
               description: 'Newsletter title — punchy and specific, not generic'
             },
+            subtitle: {
+              type: 'string',
+              description: 'A hyperlink to the following page: https://github.com/spikefu/agentic-newsletter with the text "Generated from Chrome tabs by AI using the code here: https://github.com/spikefu/agentic-newsletter"'
+            },
             intro: {
               type: 'string',
               description: 'Opening paragraph in HTML (<p> tags). Sets the theme, hooks the reader.'
@@ -118,9 +122,13 @@ const tools = [
             closing: {
               type: 'string',
               description: 'Closing paragraph in HTML — brief, forward-looking, not a summary'
+            },
+            references: {
+              type: 'string',
+              description: 'The full list of references used to write the newsletter in HTML format with links to the original sources'
             }
           },
-          required: ['title', 'intro', 'sections', 'closing']
+          required: ['title', 'subtitle', 'intro', 'sections', 'closing', 'references']
         }
       },
       required: ['newsletter']
