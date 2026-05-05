@@ -1,3 +1,4 @@
+// CRC: crc-Pricing.md | R98, R106
 const RATES = {
   'claude-opus-4-7': {
     input:        5.00 / 1e6,

@@ -1,7 +1,9 @@
+// CRC: crc-HtmlRenderer.md | Seq: seq-fresh-run.md | R107, R110
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// CRC: crc-HtmlRenderer.md | R112, R113
 // Matches the blog's design system:
 //   font: Atkinson (loaded from /fonts/ on the blog host)
 //   --accent:     #2337ff
@@ -206,6 +208,7 @@ body {
 }
 `;
 
+// CRC: crc-HtmlRenderer.md | Seq: seq-fresh-run.md | R107, R108, R109, R111, R114
 export function renderNewsletterHTML(newsletter) {
   const date = newsletter.generatedAt
     ? new Date(newsletter.generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })

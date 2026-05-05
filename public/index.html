@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- CRC: crc-WebUi.md | Seq: seq-fresh-run.md, seq-elicitor.md, seq-research-only.md, seq-clear-redo.md, seq-podcast.md, seq-cache-load.md | R115, R116, R117 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -691,6 +692,7 @@
 <body>
 
 <div class="header">
+  <!-- CRC: crc-WebUi.md | R118, R127 -->
   <div>
     <div class="header-title">📰 Newsletter Agent</div>
     <div class="header-sub"><span class="lbl-sim">Turn your open tabs into a newsletter</span><span class="lbl-adv">Discovery → Research → Newsletter</span></div>
@@ -703,6 +705,7 @@
 
 <main>
 
+  <!-- CRC: crc-WebUi.md | R119 -->
   <!-- Chrome tabs -->
   <div class="card" id="tabsCard">
     <div class="card-header">
@@ -712,6 +715,7 @@
     <div id="tabsBody"><div class="tabs-empty">Connecting to Chrome…</div></div>
   </div>
 
+  <!-- CRC: crc-WebUi.md | Seq: seq-elicitor.md, seq-fresh-run.md | R120, R131, R132, R133, R134, R135, R136, R137 -->
   <!-- Prompt editor -->
   <div class="card">
     <div class="card-header">
@@ -794,6 +798,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     </div>
   </div>
 
+  <!-- CRC: crc-WebUi.md | R92, R121, R128, R129 -->
   <!-- Model settings (advanced mode only) -->
   <div class="card adv" id="settingsCard">
     <div class="card-header">
@@ -868,6 +873,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   </div>
 
   <!-- Simple mode: progress steps -->
+  <!-- CRC: crc-WebUi.md | R122 -->
   <div class="card" id="progressCard" style="display:none">
     <div class="card-header"><span>Progress</span></div>
     <div class="progress-steps">
@@ -899,6 +905,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   </div>
 
   <!-- Activity log (advanced mode) -->
+  <!-- CRC: crc-WebUi.md | R123 -->
   <div class="card" id="activityCard" style="display:none">
     <div class="card-header">
       <span>Agent Activity <span id="modelBadge" class="badge" style="display:none;margin-left:0.5rem"></span></span>
@@ -908,6 +915,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   </div>
 
   <!-- Clusters output -->
+  <!-- CRC: crc-WebUi.md | R124 -->
   <div class="card" id="clustersCard" style="display:none">
     <div class="card-header">
       <span>Discovery Clusters</span>
@@ -917,6 +925,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   </div>
 
   <!-- Newsletter output -->
+  <!-- CRC: crc-WebUi.md | R125, R130, R138 -->
   <div id="newsletterWrap" style="display:none">
     <div class="card-header" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px 10px 0 0;border-bottom:none;padding:0.6rem 1rem">
       <span style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Newsletter</span>
@@ -932,6 +941,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   </div>
 
   <!-- Podcast player -->
+  <!-- CRC: crc-WebUi.md | R126 -->
   <div class="card" id="podcastCard" style="display:none">
     <div class="card-header">
       <span>🎙 Podcast</span>
@@ -1250,6 +1260,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
   // ── Run controls ─────────────────────────────────────────────────────────────
 
+  // CRC: crc-WebUi.md | Seq: seq-elicitor.md, seq-fresh-run.md | R134, R135, R136, R137
   async function run() {
     await savePrompts();
 
@@ -1817,6 +1828,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     window.speechSynthesis.speak(utt);
   }
 
+  // CRC: crc-WebUi.md | Seq: seq-podcast.md | R138
   async function startPodcast() {
     const card   = document.getElementById('podcastCard');
     const status = document.getElementById('podcastStatus');

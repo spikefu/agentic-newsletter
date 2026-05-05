@@ -1,8 +1,10 @@
+// CRC: crc-BrowserTools.md | Seq: seq-fresh-run.md | R72
 import CDP from 'chrome-remote-interface';
 import fs from 'fs';
 
 const DEBUG_PORT = parseInt(process.env.CHROME_DEBUG_PORT || '9222', 10);
 
+// CRC: crc-BrowserTools.md
 async function withTab(fn) {
   let target = null;
   let client = null;
@@ -24,6 +26,7 @@ async function navigate(Page, url, timeoutMs = 20000) {
   await Promise.race([loaded, new Promise(r => setTimeout(r, timeoutMs))]);
 }
 
+// CRC: crc-BrowserTools.md | Seq: seq-fresh-run.md | R82
 export async function webSearch(query, maxResults = 8) {
   try {
     return await withTab(async ({ Page, Runtime }) => {
@@ -48,6 +51,7 @@ export async function webSearch(query, maxResults = 8) {
   }
 }
 
+// CRC: crc-BrowserTools.md | Seq: seq-fresh-run.md | R83
 export async function printToPDF(url, outputPath) {
   return withTab(async ({ Page }) => {
     await navigate(Page, url, 30000);
@@ -75,6 +79,7 @@ function formatDate(raw) {
   } catch { return raw.slice(0, 40); }
 }
 
+// CRC: crc-BrowserTools.md | Seq: seq-fresh-run.md | R76, R77, R78, R79, R80, R81
 export async function fetchPage(url, maxChars = 8000) {
   try {
     return await withTab(async ({ Page, Runtime }) => {

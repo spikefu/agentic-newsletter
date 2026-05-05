@@ -1,6 +1,8 @@
+// CRC: crc-DiscoveryAgent.md | Seq: seq-fresh-run.md
 import { chat, makeToolResultMessages, calcCost, MODEL, PROVIDER } from '../lib/llm.js';
 import { fetchPage } from '../tools/browser.js';
 
+// CRC: crc-DiscoveryAgent.md | R36, R41, R42
 const SYSTEM = `You are a content curator and analyst with access to a web browser.
 
 Your job:
@@ -21,6 +23,7 @@ Rules:
 - notable_links should be specific URLs found in the page content that seem worth reading further, not generic homepages
 - Call submit_clusters only after you have fetched all seed URLs`;
 
+// CRC: crc-DiscoveryAgent.md | R34, R38, R39, R40
 const tools = [
   {
     name: 'fetch_page',
@@ -71,6 +74,7 @@ const tools = [
   }
 ];
 
+// CRC: crc-DiscoveryAgent.md | Seq: seq-fresh-run.md | R32, R33, R37, R43, R44, R45, R46
 export async function runDiscoveryAgent(discoveryPrompt, send, settings = {}) {
   send('phase', { phase: 1, label: 'Discovery', message: `Fetching URLs and identifying themes... (${PROVIDER})` });
 
@@ -128,6 +132,7 @@ export async function runDiscoveryAgent(discoveryPrompt, send, settings = {}) {
     const contents = [];
     let clusters   = null;
 
+    // CRC: crc-DiscoveryAgent.md | R35
     for (const call of result.toolCalls) {
       if (call.name === 'fetch_page') {
         const { url } = call.input;

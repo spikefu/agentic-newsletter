@@ -1,5 +1,7 @@
+// CRC: crc-ElicitorAgent.md | Seq: seq-elicitor.md | R28
 import { chat, calcCost, extractJson, FAST_MODEL } from '../lib/llm.js';
 
+// CRC: crc-ElicitorAgent.md | R21, R22, R23, R24
 const ELICIT_SYSTEM = `You are a context elicitor for an AI newsletter pipeline.
 
 The user has a set of browser tabs open. A Discovery Agent will fetch those pages, cluster them into themes, and a Research Agent will write a newsletter from the results. You read the tab list and any context the user already provided, then decide what to ask.
@@ -25,12 +27,14 @@ If context is already sufficient:
   "suggestion": "Context is clear — ready to proceed."
 }`;
 
+// CRC: crc-ElicitorAgent.md | R25
 const SYNTHESIZE_SYSTEM = `You are synthesizing a brief clarifying Q&A into a context block for an AI newsletter pipeline.
 
 The Discovery Agent and Research Agent will use this context to decide how to cluster content, what angle to take, and how to write.
 
 Write 3–5 sentences. Capture: what the user was trying to accomplish, their role/background if mentioned, what to focus on, and any grouping or framing preferences. Be specific — incorporate details from their answers. Write as direct instructions to the agents in second person ("Focus on...", "The reader is...", "Group by..."). Do not repeat the questions — just synthesize the intent.`;
 
+// CRC: crc-ElicitorAgent.md | Seq: seq-elicitor.md | R21, R22, R23, R29, R30, R31
 export async function elicitContext(tabs, existingContext, send = () => {}, settings = {}) {
   send('phase', { phase: 0, label: 'Elicitor', message: 'Analyzing your tabs and context…' });
   send('status', { message: 'Elicitor: determining clarifying questions…' });
@@ -88,6 +92,7 @@ export async function elicitContext(tabs, existingContext, send = () => {}, sett
   };
 }
 
+// CRC: crc-ElicitorAgent.md | Seq: seq-elicitor.md | R25, R26, R27, R29
 export async function synthesizeContext(tabs, existingContext, qa, send = () => {}, settings = {}) {
   const tabSummary = tabs.map((t, i) => `${i + 1}. "${t.title}" — ${t.url}`).join('\n');
   const qaText = qa

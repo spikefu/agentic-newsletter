@@ -1,3 +1,4 @@
+// CRC: crc-Server.md | Seq: seq-fresh-run.md, seq-elicitor.md, seq-research-only.md, seq-clear-redo.md, seq-podcast.md, seq-cache-load.md | R1, R2, R3
 import 'dotenv/config';
 import http from 'http';
 import express from 'express';
@@ -21,6 +22,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Events from the elicitor (runs before the SSE stream opens) are buffered here
 // and replayed as the first events when the stream connects.
+// CRC: crc-Server.md | R19
 let _elicitorBuffer = [];
 
 const CACHE_DIR        = path.join(__dirname, 'cache');
@@ -36,6 +38,7 @@ const SETTINGS_FILE    = path.join(CACHE_DIR, 'settings.json');
 const DISCOVERY_PROMPT = path.join(__dirname, 'discovery-prompt.md');
 const RESEARCH_PROMPT  = path.join(__dirname, 'research-prompt.md');
 
+// CRC: crc-Server.md | R93
 const DEFAULT_SETTINGS = {
   elicitor:  { numCtx: null, maxTokens: 512,   thinking: false, model: null },
   discovery: { numCtx: null, maxTokens: 16000, thinking: true,  model: null },
@@ -96,6 +99,7 @@ function isChromeDebugRunning() {
   });
 }
 
+// CRC: crc-Server.md | R84, R85
 async function launchChrome() {
   if (await isChromeDebugRunning()) {
     console.log(`Chrome already listening on debug port ${CHROME_PORT}`);
@@ -118,6 +122,7 @@ async function launchChrome() {
   console.log(`Launched Chrome on debug port ${CHROME_PORT} (pid ${child.pid}, profile ${userDataDir})`);
 }
 
+// CRC: crc-Server.md | R73, R74, R75
 function getChromeTabs() {
   return new Promise((resolve) => {
     const req = http.get(`http://localhost:${CHROME_PORT}/json`, (res) => {
@@ -150,6 +155,7 @@ function getChromeTabs() {
 
 // ─── Prompts API ──────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md
 app.get('/api/prompts', (req, res) => {
   res.json({
     discovery: fs.existsSync(DISCOVERY_PROMPT) ? fs.readFileSync(DISCOVERY_PROMPT, 'utf8') : '',
@@ -166,6 +172,7 @@ app.post('/api/prompts', (req, res) => {
 
 // ─── Settings API ────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md | R93
 app.get('/api/settings', (req, res) => {
   res.json({ ...loadSettings(), _meta: { provider: PROVIDER, model: MODEL, fastModel: FAST_MODEL } });
 });
@@ -216,6 +223,7 @@ app.get('/api/status', (req, res) => {
 
 // ─── Elicitor API ────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md | Seq: seq-elicitor.md | R19, R27
 app.post('/api/elicit', async (req, res) => {
   const { existingContext } = req.body;
   const { tabs } = await getChromeTabs();
@@ -267,6 +275,7 @@ app.get('/api/podcast-script', (req, res) => {
   res.sendFile(NEWSLETTER_SCRIPT);
 });
 
+// CRC: crc-Server.md | Seq: seq-podcast.md | R6, R13, R15, R64, R71
 app.get('/api/podcast-script/generate', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -302,6 +311,7 @@ app.get('/api/podcast-script/generate', async (req, res) => {
 
 // ─── Purge cache ──────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md | R11
 app.post('/api/purge', (req, res) => {
   if (fs.existsSync(CACHE_DIR)) {
     for (const f of fs.readdirSync(CACHE_DIR)) {
@@ -313,6 +323,7 @@ app.post('/api/purge', (req, res) => {
 
 // ─── Save to dist ─────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md | R16
 app.post('/api/save-dist', (req, res) => {
   if (!fs.existsSync(NEWSLETTER_HTML)) {
     return res.status(400).json({ error: 'No newsletter ready — run the pipeline first.' });
@@ -340,6 +351,7 @@ app.post('/api/save-dist', (req, res) => {
 
 // ─── SSE stream ───────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md | Seq: seq-fresh-run.md, seq-research-only.md, seq-clear-redo.md | R4, R5, R7, R8, R9, R10, R12, R14, R17, R18, R20, R55
 app.get('/api/stream', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

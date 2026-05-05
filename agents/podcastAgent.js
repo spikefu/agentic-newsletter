@@ -1,9 +1,12 @@
+// CRC: crc-PodcastAgent.md | Seq: seq-podcast.md | R67
 import { chat, calcCost, MODEL } from '../lib/llm.js';
 
+// CRC: crc-PodcastAgent.md | R66
 function stripHtml(html) {
   return (html || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 }
 
+// CRC: crc-PodcastAgent.md | Seq: seq-podcast.md | R63, R65, R66, R68, R69, R70
 export async function generatePodcastScript(newsletter, send = () => {}, settings = {}) {
   send('phase', { phase: 3, label: 'Podcast', message: 'Generating podcast script…' });
   send('status', { message: 'Writing podcast script…' });
