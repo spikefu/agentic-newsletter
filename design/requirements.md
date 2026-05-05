@@ -173,3 +173,19 @@
 - **R136:** Skip opens the SSE stream directly with the original context.
 - **R137:** The UI opens an SSE stream for Run/Research-only/Clear&Redo and dispatches each event type to the right panel.
 - **R138:** The Podcast button opens a separate SSE stream against the podcast generate endpoint.
+
+## Feature: bookmarklet
+**Source:** specs/bookmarklet.md
+
+- **R139:** A bookmarklet feature scopes a newsletter run to the tabs in one Chrome window — the window from which the bookmarklet is clicked.
+- **R140:** The Chrome Tabs card on the main page exposes a collapsible "bookmarklet" toggle that expands an install panel inside the card.
+- **R141:** The install panel contains a draggable link labeled "📰 Newsletter from this window" and a brief drag-to-bookmarks-bar instruction.
+- **R142:** The bookmarklet bakes in the install-time `location.origin` of the main page; users reinstall from the new main page if `PORT` changes in `.env`.
+- **R143:** The bookmarklet is browser JavaScript that generates a single-use nonce and calls `window.open('<origin>/?nl-nonce=<nonce>')`.
+- **R144:** The bookmarklet code contains only the URL to open with the nonce — no remote-controlled JS, no `eval`, no secrets.
+- **R145:** When the main page loads with `?nl-nonce=<n>` in its URL, it calls `GET /api/tabs?nonce=<n>` instead of the unscoped `/api/tabs`.
+- **R146:** `GET /api/tabs?nonce=<n>` queries CDP `/json/list`, finds the single target whose URL contains the nonce, and resolves that target's `windowId` via CDP `Browser.getWindowForTarget(targetId)`.
+- **R147:** `GET /api/tabs?nonce=<n>` returns tabs filtered to the resolved `windowId`, applying the existing http(s) / non-localhost filter.
+- **R148:** The unscoped `GET /api/tabs` continues to serve the base any-window flow without regression.
+- **R149:** A bookmarklet-initiated run uses the same Generate button, SSE stream, and elicitor flow as the unscoped UI; only the tab list scope differs.
+- **R150:** If the nonce target is not found in CDP (closed early, CDP unreachable), `GET /api/tabs?nonce=<n>` falls back to the unscoped any-window list so the user lands in the normal flow.

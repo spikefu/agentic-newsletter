@@ -12,7 +12,7 @@ import { runResearchAgent  } from './agents/researchAgent.js';
 import { elicitContext, synthesizeContext } from './agents/elicitorAgent.js';
 import { generatePodcastScript } from './agents/podcastAgent.js';
 import { renderNewsletterHTML } from './htmlRenderer.js';
-import { printToPDF } from './tools/browser.js';
+import { printToPDF, getWindowsForTargets, fetchChromeJson } from './tools/browser.js';
 import { PROVIDER, MODEL, FAST_MODEL } from './lib/llm.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -122,35 +122,47 @@ async function launchChrome() {
   console.log(`Launched Chrome on debug port ${CHROME_PORT} (pid ${child.pid}, profile ${userDataDir})`);
 }
 
+function filterPageTabs(all) {
+  return all.filter(t =>
+    t.type === 'page' &&
+    (t.url?.startsWith('http://') || t.url?.startsWith('https://')) &&
+    !t.url.startsWith(`http://localhost`) &&
+    !t.url.startsWith(`https://localhost`)
+  );
+}
+
 // CRC: crc-Server.md | R73, R74, R75
-function getChromeTabs() {
-  return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${CHROME_PORT}/json`, (res) => {
-      let raw = '';
-      res.on('data', chunk => raw += chunk);
-      res.on('end', () => {
-        try {
-          const all = JSON.parse(raw);
-          const tabs = all.filter(t =>
-            t.type === 'page' &&
-            (t.url?.startsWith('http://') || t.url?.startsWith('https://')) &&
-            !t.url.startsWith(`http://localhost`) &&
-            !t.url.startsWith(`https://localhost`)
-          ).map(t => ({ title: t.title || t.url, url: t.url }));
-          resolve({ tabs, error: null });
-        } catch (e) {
-          resolve({ tabs: [], error: String(e.message) });
-        }
-      });
-    });
-    req.on('error', (e) => {
-      resolve({ tabs: [], error: `Chrome not reachable on port ${CHROME_PORT}: ${e.message}` });
-    });
-    req.setTimeout(3000, () => {
-      req.destroy();
-      resolve({ tabs: [], error: `Timeout connecting to Chrome on port ${CHROME_PORT}` });
-    });
-  });
+async function getChromeTabs() {
+  try {
+    const all = await fetchChromeJson('/json');
+    return {
+      tabs: filterPageTabs(all).map(t => ({ title: t.title || t.url, url: t.url })),
+      error: null
+    };
+  } catch (e) {
+    return { tabs: [], error: e.message };
+  }
+}
+
+// CRC: crc-Server.md | Seq: seq-bookmarklet-run.md | R146, R147, R148, R149, R150
+async function tabsForRequest(req) {
+  const nonce = String(req.query.nonce || '');
+  if (!nonce) return getChromeTabs();
+  try {
+    const all = await fetchChromeJson('/json');
+    const target = all.find(t => t.type === 'page' && t.url?.includes(`nl-nonce=${nonce}`));
+    if (!target) return getChromeTabs();
+    const candidates = filterPageTabs(all);
+    const windowMap = await getWindowsForTargets([target.id, ...candidates.map(c => c.id)]);
+    const windowId = windowMap.get(target.id);
+    if (windowId == null) return getChromeTabs();
+    const tabs = candidates.filter(c => windowMap.get(c.id) === windowId)
+                           .map(t => ({ title: t.title || t.url, url: t.url }));
+    return { tabs, error: null };
+  } catch (e) {
+    console.warn('Window-scoped tab listing failed; falling back to unscoped:', e.message);
+    return getChromeTabs();
+  }
 }
 
 // ─── Prompts API ──────────────────────────────────────────────────────────────
@@ -198,8 +210,9 @@ app.get('/api/ollama-models', async (req, res) => {
 
 // ─── Tabs API ────────────────────────────────────────────────────────────────
 
+// CRC: crc-Server.md | Seq: seq-bookmarklet-run.md | R139, R145, R148
 app.get('/api/tabs', async (req, res) => {
-  res.json(await getChromeTabs());
+  res.json(await tabsForRequest(req));
 });
 
 // ─── Status ───────────────────────────────────────────────────────────────────
@@ -223,10 +236,10 @@ app.get('/api/status', (req, res) => {
 
 // ─── Elicitor API ────────────────────────────────────────────────────────────
 
-// CRC: crc-Server.md | Seq: seq-elicitor.md | R19, R27
+// CRC: crc-Server.md | Seq: seq-elicitor.md, seq-bookmarklet-run.md | R19, R27, R149
 app.post('/api/elicit', async (req, res) => {
   const { existingContext } = req.body;
-  const { tabs } = await getChromeTabs();
+  const { tabs } = await tabsForRequest(req);
   _elicitorBuffer = [];
   const bufferSend = (type, data) => _elicitorBuffer.push({ type, data });
   try {
@@ -238,9 +251,10 @@ app.post('/api/elicit', async (req, res) => {
   }
 });
 
+// CRC: crc-Server.md | Seq: seq-elicitor.md, seq-bookmarklet-run.md | R149
 app.post('/api/elicit/synthesize', async (req, res) => {
   const { existingContext, qa } = req.body;
-  const { tabs } = await getChromeTabs();
+  const { tabs } = await tabsForRequest(req);
   const bufferSend = (type, data) => _elicitorBuffer.push({ type, data });
   try {
     const synthesizedContext = await synthesizeContext(tabs, existingContext || '', qa || [], bufferSend, resolveSettings(loadSettings().elicitor));
@@ -393,7 +407,8 @@ app.get('/api/stream', async (req, res) => {
       : '';
 
     // ── Fetch open Chrome tabs ────────────────────────────────────────────────
-    const { tabs, error: tabError } = await getChromeTabs();
+    // CRC: crc-Server.md | Seq: seq-bookmarklet-run.md | R149
+    const { tabs, error: tabError } = await tabsForRequest(req);
 
     if (tabError) send('status', { message: `Chrome tabs: ${tabError}` });
 

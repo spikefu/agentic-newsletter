@@ -1,5 +1,5 @@
 # Server
-**Requirements:** R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R27, R55, R64, R71, R84, R85, R93, R1, R2
+**Requirements:** R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R27, R55, R64, R71, R84, R85, R93, R1, R2, R139, R146, R147, R148, R149, R150
 
 The HTTP entry point. Hosts the web UI, exposes JSON endpoints,
 drives the SSE pipeline by calling the agent modules in order, and
@@ -17,7 +17,14 @@ Chrome on startup if one isn't already running.
 
 ## Does
 - Serves the single-page UI from `public/`
-- Lists open Chrome tabs (`/api/tabs`) via BrowserTools
+- Lists open Chrome tabs (`/api/tabs`) via the in-process
+  `getChromeTabs` / `tabsForRequest` helpers. The optional
+  `?nonce=<n>` form fetches `/json` once, finds the target whose
+  URL contains the nonce, then asks BrowserTools'
+  `getWindowsForTargets` to resolve every candidate's `windowId`
+  in one CDP session, and returns the tabs whose `windowId`
+  matches the source target's. Falls back to the unscoped list
+  on any failure (target missing, CDP unreachable)
 - Reads/writes prompts (`/api/prompts`) and per-agent settings
   (`/api/settings`)
 - Lists installed Ollama models (`/api/ollama-models`)
@@ -52,3 +59,4 @@ Chrome on startup if one isn't already running.
 - seq-elicitor.md
 - seq-podcast.md
 - seq-cache-load.md
+- seq-bookmarklet-run.md

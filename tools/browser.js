@@ -1,8 +1,45 @@
 // CRC: crc-BrowserTools.md | Seq: seq-fresh-run.md | R72
 import CDP from 'chrome-remote-interface';
+import http from 'http';
 import fs from 'fs';
 
 const DEBUG_PORT = parseInt(process.env.CHROME_DEBUG_PORT || '9222', 10);
+
+// CRC: crc-BrowserTools.md
+export function fetchChromeJson(path, timeoutMs = 3000) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(`http://localhost:${DEBUG_PORT}${path}`, res => {
+      let raw = '';
+      res.on('data', c => raw += c);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch (e) { reject(e); } });
+    });
+    req.on('error', e => reject(new Error(`Chrome not reachable on port ${DEBUG_PORT}: ${e.message}`)));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      reject(new Error(`Timeout connecting to Chrome on port ${DEBUG_PORT}`));
+    });
+  });
+}
+
+async function withBrowserClient(fn) {
+  const versionInfo = await fetchChromeJson('/json/version');
+  const client = await CDP({ target: versionInfo.webSocketDebuggerUrl });
+  try { return await fn(client); }
+  finally { await client.close().catch(() => {}); }
+}
+
+// CRC: crc-BrowserTools.md | Seq: seq-bookmarklet-run.md | R146, R147
+export async function getWindowsForTargets(targetIds) {
+  return withBrowserClient(async client => {
+    const entries = await Promise.all(targetIds.map(async id => {
+      try {
+        const { windowId } = await client.Browser.getWindowForTarget({ targetId: id });
+        return [id, windowId];
+      } catch { return [id, null]; }
+    }));
+    return new Map(entries);
+  });
+}
 
 // CRC: crc-BrowserTools.md
 async function withTab(fn) {

@@ -8,8 +8,8 @@ endpoints.
 
 | Method | Path                            | Purpose                                  |
 |--------|---------------------------------|------------------------------------------|
-| GET    | `/`                             | Serve the single-page UI                 |
-| GET    | `/api/tabs`                     | List currently-open Chrome tabs          |
+| GET    | `/`                             | Serve the single-page UI (accepts `?nl-nonce=<n>` from the bookmarklet) |
+| GET    | `/api/tabs`                     | List currently-open Chrome tabs (accepts `?nonce=<n>` to scope to one window) |
 | GET    | `/api/prompts`                  | Read discovery + research prompt files   |
 | POST   | `/api/prompts`                  | Save discovery + research prompt files   |
 | GET    | `/api/settings`                 | Read per-agent model settings + provider |
@@ -72,3 +72,6 @@ button.
   coded.
 - **Toast / status** — short ephemeral messages for save/purge
   actions.
+- **Bookmarklet install panel** — collapsible row inside the
+  Chrome Tabs card; renders a draggable link whose `href` is a
+  `javascript:…` URL baking in the page's `location.origin`.

@@ -1,5 +1,5 @@
 # UI: Main page layout
-**Requirements:** R115, R116, R117, R118, R119, R120, R122, R123, R125, R127, R128, R129
+**Requirements:** R115, R116, R117, R118, R119, R120, R122, R123, R125, R127, R128, R129, R140, R141
 
 Single-page layout. Cards stack vertically inside a 1100px max
 content column. The Advanced toggle in the header reveals extra
@@ -10,9 +10,12 @@ panels.
 │  📰 Newsletter Agent           [provider/model]·  $0.0000   ⚙ Advanced  │  ← header (sticky)
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  ┌─ 📂 Chrome Tabs · N tabs ──────────────────────────────────  ↺ ───┐  │
+│  ┌─ 📂 Chrome Tabs · N tabs ──────────────────────  bookmarklet ▾  ↺ ┐  │
 │  │  • title (domain)                                                  │  │
 │  │  • title (domain)  …                                               │  │
+│  │  ┌─ Drag this to your bookmarks bar ────────────────────────────┐ │  │
+│  │  │  [📰 Newsletter from this window]   (collapsed by default)   │ │  │
+│  │  └──────────────────────────────────────────────────────────────┘ │  │
 │  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─ Run · Saved ✓ ──────────────────────────────────────────────────┐   │

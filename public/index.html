@@ -705,12 +705,19 @@
 
 <main>
 
-  <!-- CRC: crc-WebUi.md | R119 -->
+  <!-- CRC: crc-WebUi.md | Seq: seq-bookmarklet-run.md | R119, R140, R141, R142, R143, R144 -->
   <!-- Chrome tabs -->
   <div class="card" id="tabsCard">
     <div class="card-header">
       <span>📂 Chrome Tabs <span id="tabCountBadge" class="badge" style="margin-left:0.5rem">loading…</span></span>
-      <button class="btn btn-secondary" style="padding:0.25rem 0.6rem;font-size:0.72rem" onclick="loadTabs()">↺ Refresh</button>
+      <span style="display:flex;gap:0.4rem">
+        <button class="btn btn-secondary" id="bookmarkletToggle" style="padding:0.25rem 0.6rem;font-size:0.72rem" onclick="toggleBookmarkletPanel()">bookmarklet ▾</button>
+        <button class="btn btn-secondary" style="padding:0.25rem 0.6rem;font-size:0.72rem" onclick="loadTabs()">↺ Refresh</button>
+      </span>
+    </div>
+    <div id="bookmarkletPanel" style="display:none;padding:0.6rem 1rem;border-bottom:1px solid var(--border);background:var(--surface2);align-items:center;gap:0.7rem;font-size:0.78rem;color:var(--muted)">
+      <span>Drag this to your bookmarks bar:</span>
+      <a id="bookmarkletLink" href="#" style="display:inline-block;padding:0.3rem 0.7rem;background:var(--accent);color:#fff;border-radius:5px;text-decoration:none;font-weight:600;cursor:grab" onclick="return false">📰 Newsletter from this window</a>
     </div>
     <div id="tabsBody"><div class="tabs-empty">Connecting to Chrome…</div></div>
   </div>
@@ -1032,13 +1039,22 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   });
 
   // ── Chrome tabs ──────────────────────────────────────────────────────────────
+  // CRC: crc-WebUi.md | Seq: seq-bookmarklet-run.md | R145, R149
+
+  // The nonce sticks to the session: every server call (tabs, elicit,
+  // stream) uses it until the user navigates away from this page.
+  const _nlNonce = new URLSearchParams(location.search).get('nl-nonce') || '';
+  function withNonce(url) {
+    if (!_nlNonce) return url;
+    return url + (url.includes('?') ? '&' : '?') + 'nonce=' + encodeURIComponent(_nlNonce);
+  }
 
   async function loadTabs() {
     const body  = document.getElementById('tabsBody');
     const badge = document.getElementById('tabCountBadge');
     body.innerHTML = '<div class="tabs-empty">Refreshing…</div>';
     try {
-      const { tabs, error } = await fetch('/api/tabs').then(r => r.json());
+      const { tabs, error } = await fetch(withNonce('/api/tabs')).then(r => r.json());
       if (error && !tabs.length) {
         body.innerHTML = `<div class="tabs-error">⚠️ ${esc(error)}</div>`;
         badge.textContent = '0 tabs';
@@ -1076,6 +1092,19 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
       </div>`;
     }).join('')}</div>`;
   }
+
+  // ── Bookmarklet install panel ─────────────────────────────────────────────
+  // CRC: crc-WebUi.md | Seq: seq-bookmarklet-run.md | R140, R141, R142, R143, R144
+
+  function toggleBookmarkletPanel() {
+    const p = document.getElementById('bookmarkletPanel');
+    p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+  }
+
+  // Bake the install-time origin into the bookmarklet href; the nonce is
+  // generated fresh each click via crypto.randomUUID() in the source page.
+  document.getElementById('bookmarkletLink').href =
+    `javascript:(function(){var n=crypto.randomUUID();window.open(${JSON.stringify(location.origin + '/?nl-nonce=')}+n)})();`;
 
   // ── Load prompts and status on start ────────────────────────────────────────
 
@@ -1137,7 +1166,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   function skipElicitor() {
     document.getElementById('elicitorModal').style.display = 'none';
     clearUI();
-    startStream('/api/stream');
+    startStream(withNonce('/api/stream'));
   }
 
   async function submitElicitor() {
@@ -1152,7 +1181,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
     try {
       const existingContext = document.getElementById('discoveryPrompt').value;
-      await fetch('/api/elicit/synthesize', {
+      await fetch(withNonce('/api/elicit/synthesize'), {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ existingContext, qa })
@@ -1165,7 +1194,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     btn.classList.remove('loading');
     document.getElementById('elicitorModal').style.display = 'none';
     clearUI();
-    startStream('/api/stream');
+    startStream(withNonce('/api/stream'));
   }
 
   // ── Example chips ────────────────────────────────────────────────────────────
@@ -1270,7 +1299,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
     try {
       const existingContext = document.getElementById('discoveryPrompt').value;
-      const res  = await fetch('/api/elicit', {
+      const res  = await fetch(withNonce('/api/elicit'), {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ existingContext })
@@ -1282,7 +1311,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
       if (ready || !questions?.length) {
         clearUI();
-        startStream('/api/stream');
+        startStream(withNonce('/api/stream'));
       } else {
         showElicitor(questions, suggestion);
       }
@@ -1290,7 +1319,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
       btn.disabled = false;
       btn.classList.remove('loading');
       clearUI();
-      startStream('/api/stream');
+      startStream(withNonce('/api/stream'));
     }
   }
 
@@ -1308,13 +1337,13 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
       setStep(1, 'active');
       document.getElementById('progressCard').style.display = '';
     }
-    startStream('/api/stream?phase=2');
+    startStream(withNonce('/api/stream?phase=2'));
   }
 
   async function redo() {
     await savePrompts();
     clearUI();
-    startStream('/api/stream?redo=true');
+    startStream(withNonce('/api/stream?redo=true'));
   }
 
   async function purge() {

@@ -59,6 +59,17 @@ set per run to suppress duplicate `fetch_page` calls. Repeats
 return a "use the content you already have" string instead of
 re-navigating.
 
+### Bookmarklet rendezvous (window-scoped runs)
+When the user clicks the installed bookmarklet, the new tab loads
+the main UI with a `?nl-nonce=<n>` query parameter. The UI calls
+`/api/tabs?nonce=<n>` instead of the unscoped form. The Server
+finds the new tab in CDP `/json/list` by URL substring match,
+calls `Browser.getWindowForTarget` to learn its `windowId`, and
+returns the tab list filtered to that window. The rest of the
+pipeline (Generate, SSE stream, elicitor) is unchanged. If the
+nonce target is missing or CDP is unreachable, the handler falls
+back to the unscoped any-window list.
+
 ### Loop control: step limit + nudge-once
 DiscoveryAgent (R43, R44) and ResearchAgent (R61, R62) both run a
 chat→tool-call→tool-result loop with a step limit and a single
@@ -93,6 +104,7 @@ opens (R19).
 - [x] seq-clear-redo.md → `server.js`
 - [x] seq-podcast.md → `server.js`, `agents/podcastAgent.js`, `lib/llm.js`
 - [x] seq-cache-load.md → `server.js`, `public/index.html`
+- [x] seq-bookmarklet-run.md → `server.js`, `public/index.html`, `tools/browser.js`
 
 ### UI Layouts
 - [x] ui-main.md → `public/index.html`
@@ -104,3 +116,5 @@ opens (R19).
 ## Gaps
 
 (Tracked during Gaps Phase.)
+
+- A1: getChromeTabs is described in crc-BrowserTools.md but implemented in server.js — pre-existing from reverse-engineering. Acceptable: server.js uses raw HTTP /json (not chrome-remote-interface) for tab listing, so the function does not require BrowserTools' CDP machinery. Future refactor could move it; not required.
