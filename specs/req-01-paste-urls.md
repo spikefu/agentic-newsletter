@@ -1,7 +1,7 @@
 ---
 id: req-01
 title: Paste-to-open URLs
-status: pending-approval
+status: approved spikefu@gmail.com
 ---
 
 # req-01 — Paste-to-open URLs

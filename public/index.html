@@ -703,6 +703,23 @@
 
 <main>
 
+  <!-- Open URLs (req-01.1) -->
+  <div class="card" id="openUrlsCard">
+    <div class="card-header">
+      <span>🔗 Open URLs in Chrome</span>
+    </div>
+    <div style="padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.6rem">
+      <textarea id="openUrlsInput" placeholder="Paste URLs here, one per line.
+https://example.com/article-1
+https://example.com/article-2" style="min-height: 110px; border: 1px solid var(--border); border-radius: 6px"></textarea>
+      <div style="display: flex; align-items: center; gap: 0.6rem">
+        <button id="openUrlsBtn" class="btn btn-primary" onclick="openPastedUrls()">Open in Chrome</button>
+        <span id="openUrlsHint" style="font-size: 0.7rem; color: var(--muted)">Opens each URL as a new tab. Existing tabs are not duplicated.</span>
+      </div>
+      <div id="openUrlsStatus" style="font-family: monospace; font-size: 0.74rem; line-height: 1.55; display: none"></div>
+    </div>
+  </div>
+
   <!-- Chrome tabs -->
   <div class="card" id="tabsCard">
     <div class="card-header">
@@ -1050,6 +1067,62 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     } catch (e) {
       body.innerHTML = `<div class="tabs-error">⚠️ ${esc(String(e.message))}</div>`;
       badge.textContent = 'error';
+    }
+  }
+
+  // ── Open URLs (req-01.1) ────────────────────────────────────────────────────
+
+  async function openPastedUrls() {
+    const input  = document.getElementById('openUrlsInput');
+    const btn    = document.getElementById('openUrlsBtn');
+    const status = document.getElementById('openUrlsStatus');
+    const raw    = input.value;
+
+    if (!raw.trim()) {
+      status.style.display = 'block';
+      status.style.color   = 'var(--muted)';
+      status.textContent   = 'Nothing to open — paste at least one URL.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    status.style.display = 'block';
+    status.style.color   = 'var(--muted)';
+    status.textContent   = 'Opening…';
+
+    try {
+      const res  = await fetch('/api/open-urls', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ urls: raw })
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        status.style.color = 'var(--red)';
+        status.textContent = `⚠️ ${json.error || `Server returned ${res.status}`}`;
+        return;
+      }
+
+      const lines = (json.results || []).map(r => {
+        if (r.status === 'opened')       return `<span style="color:var(--green)">✓</span> ${esc(r.url)}`;
+        if (r.status === 'already_open') return `<span style="color:var(--muted)">•</span> ${esc(r.url)} <span style="color:var(--muted)">— already open</span>`;
+        if (r.status === 'invalid')      return `<span style="color:var(--red)">✗</span> ${esc(r.url)} <span style="color:var(--red)">— ${esc(r.reason || 'invalid url')}</span>`;
+        if (r.status === 'failed')       return `<span style="color:var(--red)">✗</span> ${esc(r.url)} <span style="color:var(--red)">— ${esc(r.reason || 'failed')}</span>`;
+        return esc(r.url);
+      });
+      status.style.color = 'var(--text)';
+      status.innerHTML   = lines.length ? lines.join('<br>') : '<span style="color:var(--muted)">No URLs submitted.</span>';
+
+      // Refresh the Chrome Tabs panel so newly opened tabs show up.
+      loadTabs();
+    } catch (e) {
+      status.style.color = 'var(--red)';
+      status.textContent = `⚠️ ${e.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
     }
   }
 

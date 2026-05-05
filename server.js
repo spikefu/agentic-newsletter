@@ -11,8 +11,9 @@ import { runResearchAgent  } from './agents/researchAgent.js';
 import { elicitContext, synthesizeContext } from './agents/elicitorAgent.js';
 import { generatePodcastScript } from './agents/podcastAgent.js';
 import { renderNewsletterHTML } from './htmlRenderer.js';
-import { printToPDF } from './tools/browser.js';
+import { printToPDF, openTab } from './tools/browser.js';
 import { PROVIDER, MODEL, FAST_MODEL } from './lib/llm.js';
+import { createOpenUrlsHandler } from './lib/openUrlsHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -194,6 +195,9 @@ app.get('/api/ollama-models', async (req, res) => {
 app.get('/api/tabs', async (req, res) => {
   res.json(await getChromeTabs());
 });
+
+// req-01.4: open pasted URLs as new tabs in the debug Chrome instance.
+app.post('/api/open-urls', createOpenUrlsHandler({ getChromeTabs, openTab }));
 
 // ─── Status ───────────────────────────────────────────────────────────────────
 

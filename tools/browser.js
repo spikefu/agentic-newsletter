@@ -24,6 +24,19 @@ async function navigate(Page, url, timeoutMs = 20000) {
   await Promise.race([loaded, new Promise(r => setTimeout(r, timeoutMs))]);
 }
 
+/**
+ * Open `url` as a new tab in the debug Chrome instance and leave it open.
+ *
+ * Implements req-01.6. Resolves with `{ id, url }` on success. Rejects with an
+ * Error whose message is suitable for surfacing as a per-URL `failed` reason.
+ *
+ * Side effects: creates one tab in Chrome that persists after this call returns.
+ */
+export async function openTab(url) {
+  const target = await CDP.New({ port: DEBUG_PORT, url });
+  return { id: target.id, url: target.url || url };
+}
+
 export async function webSearch(query, maxResults = 8) {
   try {
     return await withTab(async ({ Page, Runtime }) => {
