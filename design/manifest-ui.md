@@ -25,10 +25,20 @@ endpoints.
 | POST   | `/api/purge`                    | Delete all cache files                   |
 | POST   | `/api/save-dist`                | Copy cached output to `dist/<ts>/`       |
 | GET    | `/api/stream`                   | SSE: run main pipeline (Discover → Research → Render) |
+| POST   | `/api/cc/run`                   | CC mode: enqueue a run (single slot)     |
+| GET    | `/api/cc/wait`                  | CC mode: long-poll, returns one work item |
+| POST   | `/api/cc/event`                 | CC mode: status push (fans out via SSE)  |
+| POST   | `/api/cc/answer`                | CC mode: UI POSTs elicitor answers       |
+| GET    | `/api/cc/status`                | CC mode: current presence state          |
+| GET    | `/api/cc/connection`            | CC mode: liveness + registered session id |
 
 Stream query parameters:
 - `?redo=true` — clear cache before running
 - `?phase=2`  — skip Discover, reuse cached clusters
+
+CC-mode `/api/cc/run` accepts the same `?nonce=<n>` query parameter
+as `/api/tabs` (R213): when present, the server resolves the
+windowId and seeds `cache/run.json` with the scoped tab list.
 
 ## Theme tokens (UI dark theme)
 
@@ -60,6 +70,13 @@ Settings card, Clusters card, thinking text and prompt events in
 the activity log, "Newsletter Style" textarea, "⚡ Research Only"
 button.
 
+The run-mode toggle persists in `localStorage` under the key
+`newsletterRunMode` (values: `claude` | `ollama` | `claude-code`).
+Default is `claude`. `claude` and `ollama` route Generate clicks
+to `/api/stream`; `claude-code` routes them to `/api/cc/run` and
+listens on the same SSE channel for events fanned out by the
+server.
+
 ## Global components
 
 - **SSE EventSource handler** — installed on `/api/stream` and
@@ -75,3 +92,13 @@ button.
 - **Bookmarklet install panel** — collapsible row inside the
   Chrome Tabs card; renders a draggable link whose `href` is a
   `javascript:…` URL baking in the page's `location.origin`.
+- **Run-mode toggle** — three-state selector in the header
+  (*Claude API · Ollama · Claude Code*). Persists in localStorage.
+  Routes Generate clicks based on the active mode.
+- **CC presence indicator** — small header badge that polls
+  `/api/cc/status` every 2–3s in CC mode. Paints green
+  (listening), spin (running), or gray (not_connected /
+  reconnecting).
+- **CC onboarding modal** — shown when the user clicks Generate
+  in CC mode while CC is not_connected. Explains how to start a
+  CC session and which command to run; the click does NOT enqueue.

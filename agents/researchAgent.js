@@ -2,8 +2,8 @@
 import { chat, makeToolResultMessages, calcCost, MODEL, PROVIDER } from '../lib/llm.js';
 import { fetchPage, webSearch } from '../tools/browser.js';
 
-// CRC: crc-ResearchAgent.md | R47, R48, R56, R57, R58, R59
-function buildSystem(researchPrompt) {
+// CRC: crc-ResearchAgent.md | R47, R48, R56, R57, R58, R59, R153
+export function buildSystem(researchPrompt) {
   const style = researchPrompt?.trim()
     ? researchPrompt.trim()
     : `Write for a technically sophisticated but time-pressed reader.

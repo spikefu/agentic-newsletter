@@ -1,8 +1,8 @@
 // CRC: crc-ElicitorAgent.md | Seq: seq-elicitor.md | R28
 import { chat, calcCost, extractJson, FAST_MODEL } from '../lib/llm.js';
 
-// CRC: crc-ElicitorAgent.md | R21, R22, R23, R24
-const ELICIT_SYSTEM = `You are a context elicitor for an AI newsletter pipeline.
+// CRC: crc-ElicitorAgent.md | R21, R22, R23, R24, R153
+export const ELICIT_SYSTEM = `You are a context elicitor for an AI newsletter pipeline.
 
 The user has a set of browser tabs open. A Discovery Agent will fetch those pages, cluster them into themes, and a Research Agent will write a newsletter from the results. You read the tab list and any context the user already provided, then decide what to ask.
 
@@ -27,8 +27,8 @@ If context is already sufficient:
   "suggestion": "Context is clear — ready to proceed."
 }`;
 
-// CRC: crc-ElicitorAgent.md | R25
-const SYNTHESIZE_SYSTEM = `You are synthesizing a brief clarifying Q&A into a context block for an AI newsletter pipeline.
+// CRC: crc-ElicitorAgent.md | R25, R153
+export const SYNTHESIZE_SYSTEM = `You are synthesizing a brief clarifying Q&A into a context block for an AI newsletter pipeline.
 
 The Discovery Agent and Research Agent will use this context to decide how to cluster content, what angle to take, and how to write.
 

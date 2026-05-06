@@ -1,5 +1,5 @@
 # WebUi
-**Requirements:** R115, R116, R117, R118, R119, R120, R121, R122, R123, R124, R125, R126, R127, R128, R129, R130, R131, R132, R133, R134, R135, R136, R137, R138, R139, R140, R141, R142, R143, R144, R145, R149
+**Requirements:** R115, R116, R117, R118, R119, R120, R121, R122, R123, R124, R125, R126, R127, R128, R129, R130, R131, R132, R133, R134, R135, R136, R137, R138, R139, R140, R141, R142, R143, R144, R145, R149, R151, R193, R194, R214, R215
 
 Single-page browser UI. The only entry point for the pipeline.
 Fetches tabs, sends the user's prompt to the elicitor, opens the
@@ -15,6 +15,11 @@ on-demand actions like Save and Podcast.
 - The page's own `location.origin` (used to bake the bookmarklet
   link at render time) and any `?nl-nonce=<n>` query parameter
   passed in by the bookmarklet
+- The current run-mode setting — *Claude API* / *Ollama* /
+  *Claude Code* — persisted in `localStorage` (key:
+  `newsletterRunMode`)
+- The current CC presence (listening / running / reconnecting /
+  not_connected), polled from `/api/cc/status` every 2–3s
 
 ## Does
 - Loads tabs (`/api/tabs`, or `/api/tabs?nonce=<n>` when the
@@ -47,6 +52,18 @@ on-demand actions like Save and Podcast.
   current `location.origin` baked in and contains only a
   `window.open('<origin>/?nl-nonce=<nonce>')` call (no eval, no
   remote-controlled JS, no secrets)
+- Renders a header mode toggle — *Claude API · Ollama · Claude
+  Code* — and routes Generate clicks accordingly: the first two
+  open an `EventSource` against `/api/stream` (existing behavior);
+  *Claude Code* POSTs to `/api/cc/run` and listens on the same
+  SSE channel for events fanned out by the server
+- Renders a small header presence indicator (green=listening,
+  spin=running, gray=not_connected) by polling `/api/cc/status`
+  every 2–3s in CC mode
+- When the user clicks Generate in CC mode while CC is
+  not_connected, shows an onboarding modal explaining how to
+  start a CC session and which command to run; the click does
+  NOT enqueue (no one would pick it up)
 
 ## Collaborators
 - Server: every interaction goes through one of its endpoints
@@ -60,3 +77,6 @@ on-demand actions like Save and Podcast.
 - seq-podcast.md
 - seq-cache-load.md
 - seq-bookmarklet-run.md
+- seq-cc-bootstrap.md
+- seq-cc-run.md
+- seq-cc-elicitor.md

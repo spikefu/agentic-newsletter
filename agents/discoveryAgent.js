@@ -2,8 +2,8 @@
 import { chat, makeToolResultMessages, calcCost, MODEL, PROVIDER } from '../lib/llm.js';
 import { fetchPage } from '../tools/browser.js';
 
-// CRC: crc-DiscoveryAgent.md | R36, R41, R42
-const SYSTEM = `You are a content curator and analyst with access to a web browser.
+// CRC: crc-DiscoveryAgent.md | R36, R41, R42, R153
+export const SYSTEM = `You are a content curator and analyst with access to a web browser.
 
 Your job:
 1. Read the user's prompt — it contains URLs and context about what they want analyzed

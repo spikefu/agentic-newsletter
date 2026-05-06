@@ -698,8 +698,26 @@
     <div class="header-sub"><span class="lbl-sim">Turn your open tabs into a newsletter</span><span class="lbl-adv">Discovery → Research → Newsletter</span></div>
   </div>
   <div class="header-right">
+    <!-- CRC: crc-WebUi.md | Seq: seq-cc-bootstrap.md | R193, R194, R214, R215 -->
+    <select id="runModeSelect" onchange="onRunModeChange()" title="Pick the mode that drives the LLM loop" style="padding:0.25rem 0.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.78rem">
+      <option value="claude">Claude API</option>
+      <option value="ollama">Ollama</option>
+      <option value="claude-code">Claude Code</option>
+    </select>
+    <span id="ccPresence" title="Claude Code presence" style="display:none;font-size:0.95rem;line-height:1">●</span>
     <span id="liveCost">$0.0000</span>
     <button class="mode-btn" id="modeBtn" onclick="toggleMode()">⚙ Advanced</button>
+  </div>
+</div>
+
+<!-- CRC: crc-WebUi.md | Seq: seq-cc-bootstrap.md | R194 -->
+<div id="ccOnboardModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.5rem;max-width:520px;color:var(--text)">
+    <h3 style="margin:0 0 0.7rem">Claude Code isn't connected</h3>
+    <p style="margin:0 0 0.7rem;line-height:1.5">From a Claude Code session in this project, run:</p>
+    <pre style="background:var(--surface2);padding:0.7rem;border-radius:6px;font-size:0.85rem;margin:0 0 0.7rem">/newsletter</pre>
+    <p style="margin:0 0 0.7rem;line-height:1.5">— or, if you've set up the skill, <code>newsletter wait</code>. Then click Generate again.</p>
+    <button onclick="document.getElementById('ccOnboardModal').style.display='none'" class="btn btn-secondary" style="padding:0.4rem 0.9rem">Got it</button>
   </div>
 </div>
 
@@ -1108,6 +1126,17 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
   // ── Load prompts and status on start ────────────────────────────────────────
 
+  // CRC: crc-WebUi.md | R193, R215
+  // Defer with setTimeout(0) so the let-declarations further down
+  // in this script (_ccPresenceState, _ccStreamES) finish initializing
+  // before we touch them — otherwise we hit the TDZ.
+  setTimeout(() => {
+    document.getElementById('runModeSelect').value = getRunMode();
+    updateCcPresenceUi();
+    setInterval(() => { if (isCcMode()) pollCcStatus(); }, 2500);
+    if (isCcMode()) pollCcStatus();
+  }, 0);
+
   (async () => {
     loadTabs();          // populate tab list immediately
     loadModelSettings(); // populate settings card (fire-and-forget)
@@ -1165,6 +1194,15 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
   function skipElicitor() {
     document.getElementById('elicitorModal').style.display = 'none';
+    if (isCcMode()) {
+      // CC mode: empty body unblocks the agent's await-answer with "skip".
+      fetch('/api/cc/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).catch(() => {});
+      return;
+    }
     clearUI();
     startStream(withNonce('/api/stream'));
   }
@@ -1178,6 +1216,22 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     const btn = document.getElementById('elicitorGoBtn');
     btn.disabled = true;
     btn.classList.add('loading');
+
+    if (isCcMode()) {
+      // CC mode: POST answers to /api/cc/answer to unblock the agent's
+      // elicit-await call. The agent then synthesizes context and runs `next`.
+      try {
+        await fetch('/api/cc/answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ qa }),
+        });
+      } catch (_) { /* proceed anyway */ }
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      document.getElementById('elicitorModal').style.display = 'none';
+      return;
+    }
 
     try {
       const existingContext = document.getElementById('discoveryPrompt').value;
@@ -1287,11 +1341,89 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     } catch (_) {}
   }
 
+  // ── Run mode (Claude API / Ollama / Claude Code) ─────────────────────────
+  // CRC: crc-WebUi.md | Seq: seq-cc-bootstrap.md | R193, R194, R214, R215
+
+  function getRunMode() { return localStorage.getItem('newsletterRunMode') || 'claude'; }
+  function setRunMode(m) { localStorage.setItem('newsletterRunMode', m); }
+  function isCcMode() { return getRunMode() === 'claude-code'; }
+
+  function onRunModeChange() {
+    const m = document.getElementById('runModeSelect').value;
+    setRunMode(m);
+    updateCcPresenceUi();
+  }
+
+  // CRC: crc-WebUi.md | R193
+  let _ccPresenceState = 'unknown';
+  let _ccStreamES = null;
+  function paintCcPresence(state) {
+    const el = document.getElementById('ccPresence');
+    if (!isCcMode()) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.title = `Claude Code: ${state}`;
+    el.style.color = ({
+      listening:     'var(--green)',
+      running:       'var(--yellow)',
+      reconnecting:  'var(--muted)',
+      not_connected: 'var(--red)',
+    })[state] || 'var(--muted)';
+  }
+  async function pollCcStatus() {
+    try {
+      const r = await fetch('/api/cc/status').then(r => r.json());
+      _ccPresenceState = r.presence;
+      paintCcPresence(r.presence);
+    } catch { paintCcPresence('not_connected'); }
+  }
+  function updateCcPresenceUi() {
+    if (isCcMode()) {
+      paintCcPresence(_ccPresenceState);
+      if (!_ccStreamES) {
+        _ccStreamES = new EventSource('/api/cc/stream');
+        _ccStreamES.onmessage = (ev) => {
+          try {
+            const evt = JSON.parse(ev.data);
+            // Reuse the existing event dispatcher used by /api/stream.
+            handleStreamEvent(evt);
+          } catch {}
+        };
+        _ccStreamES.onerror = () => { /* reconnect handled by browser */ };
+      }
+    } else {
+      document.getElementById('ccPresence').style.display = 'none';
+      if (_ccStreamES) { _ccStreamES.close(); _ccStreamES = null; }
+    }
+  }
+
   // ── Run controls ─────────────────────────────────────────────────────────────
 
-  // CRC: crc-WebUi.md | Seq: seq-elicitor.md, seq-fresh-run.md | R134, R135, R136, R137
+  async function ccRun(body) {
+    if (_ccPresenceState === 'not_connected') {
+      document.getElementById('ccOnboardModal').style.display = 'flex';
+      return;
+    }
+    // R213 — pass through the bookmarklet nonce so the work item is
+    // seeded with the window-scoped tab list, not the any-window default.
+    const r = await fetch(withNonce('/api/cc/run'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.status === 409) { alert('A run is already in progress.'); return; }
+    if (r.status === 503) {
+      document.getElementById('ccOnboardModal').style.display = 'flex';
+      return;
+    }
+    if (!r.ok) { alert(`Run failed (${r.status})`); return; }
+    clearUI();
+    // Events flow over the persistent /api/cc/stream EventSource.
+  }
+
+  // CRC: crc-WebUi.md | Seq: seq-elicitor.md, seq-fresh-run.md, seq-cc-run.md | R134, R135, R136, R137
   async function run() {
     await savePrompts();
+    if (isCcMode()) { return ccRun({ kind: 'run', mode: 'fresh' }); }
 
     const btn = document.getElementById('runBtn');
     btn.disabled = true;
@@ -1325,6 +1457,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
   async function runPhase2() {
     await savePrompts();
+    if (isCcMode()) { return ccRun({ kind: 'run', mode: 'phase2' }); }
     document.getElementById('feedLog').innerHTML = '';
     document.getElementById('newsletterWrap').style.display = 'none';
     document.getElementById('costCard').style.display = 'none';
@@ -1342,6 +1475,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
   async function redo() {
     await savePrompts();
+    if (isCcMode()) { return ccRun({ kind: 'run', mode: 'redo' }); }
     clearUI();
     startStream(withNonce('/api/stream?redo=true'));
   }
@@ -1393,26 +1527,42 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
 
     es = new EventSource(url);
 
-    es.onmessage = (e) => {
-      const { type, data } = JSON.parse(e.data);
+    es.onmessage = (e) => handleStreamEvent(JSON.parse(e.data));
 
+    es.onerror = () => {
+      addLog('error', 'Connection lost.');
+      finish();
+      if (es) { es.close(); es = null; }
+    };
+  }
+
+  // CRC: crc-WebUi.md | Seq: seq-cc-run.md | R152
+  // Single dispatch shared by /api/stream (API/Ollama) and /api/cc/stream (CC).
+  function handleStreamEvent({ type, data }) {
       switch (type) {
         case 'phase':
-          if (isAdv()) {
-            if (data.phase === 1) {
-              document.getElementById('phase1Banner').classList.add('active');
-              document.getElementById('phase2Banner').classList.remove('active');
-              document.getElementById('p1Msg').textContent = data.message;
+          // Numeric phase 1/2 drive API-mode banner and stepper logic.
+          // CC mode also sends string phases (elicit, render, podcast, done)
+          // for which the banner/stepper don't fire — they only show in the log.
+          if (typeof data.phase === 'number') {
+            if (isAdv()) {
+              if (data.phase === 1) {
+                document.getElementById('phase1Banner').classList.add('active');
+                document.getElementById('phase2Banner').classList.remove('active');
+                document.getElementById('p1Msg').textContent = data.message;
+              } else {
+                document.getElementById('phase1Banner').classList.remove('active');
+                document.getElementById('phase2Banner').classList.add('active');
+                document.getElementById('p2Msg').textContent = data.message;
+              }
             } else {
-              document.getElementById('phase1Banner').classList.remove('active');
-              document.getElementById('phase2Banner').classList.add('active');
-              document.getElementById('p2Msg').textContent = data.message;
+              if (data.phase === 1) setStep(0, 'active');
+              else { setStep(0, 'done'); setStep(1, 'active'); }
             }
+            addLog('phase', `Phase ${data.phase}: ${data.label} — ${data.message}`);
           } else {
-            if (data.phase === 1) setStep(0, 'active');
-            else { setStep(0, 'done'); setStep(1, 'active'); }
+            addLog('phase', `${data.label} — ${data.message}`);
           }
-          addLog('phase', `Phase ${data.phase}: ${data.label} — ${data.message}`);
           break;
 
         case 'status':
@@ -1468,6 +1618,13 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
         case 'output_ready':
           showDownloads(data.html, data.pdf);
           addLog('done', `Files ready — ${data.html}${data.pdf ? ', ' + data.pdf : ''}`);
+          if (data.html) {
+            // Pop the rendered newsletter open in a new tab. Some browsers
+            // block window.open() from SSE handlers (no user gesture); the
+            // download buttons are the always-available fallback.
+            const w = window.open(data.html, '_blank', 'noopener,noreferrer');
+            if (!w) addLog('info', 'Popup blocked — click the View HTML button to open the newsletter.');
+          }
           break;
 
         case 'prompt': {
@@ -1484,6 +1641,14 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
           log.scrollTop = log.scrollHeight;
           break;
         }
+
+        case 'questions':
+          // CC mode: elicitor subagent pushed questions via /api/cc/event.
+          // Open the elicitor card so the user can answer.
+          if (Array.isArray(data?.questions) && data.questions.length) {
+            showElicitor(data.questions, data.suggestion || '');
+          }
+          break;
 
         case 'model_info': {
           const badge = document.getElementById('modelBadge');
@@ -1540,16 +1705,9 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
         case 'error':
           addLog('error', data.message);
           finish();
-          es.close(); es = null;
+          if (es) { es.close(); es = null; }
           break;
       }
-    };
-
-    es.onerror = () => {
-      addLog('error', 'Connection lost.');
-      finish();
-      if (es) { es.close(); es = null; }
-    };
   }
 
   function finish() {

@@ -7,7 +7,7 @@ panels.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  📰 Newsletter Agent           [provider/model]·  $0.0000   ⚙ Advanced  │  ← header (sticky)
+│  📰 Newsletter Agent  [Claude API|Ollama|Claude Code] ●  $0.0000  ⚙ Advanced │  ← header (sticky)
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌─ 📂 Chrome Tabs · N tabs ──────────────────────  bookmarklet ▾  ↺ ┐  │
@@ -63,5 +63,10 @@ panels.
 
 * = Advanced-only element
 ```
+
+The header shows a three-state run-mode toggle (Claude API /
+Ollama / Claude Code) and, in CC mode, a small presence
+indicator (●) next to it: green = listening, spin = running,
+gray = not_connected / reconnecting.
 
 References: WebUi (crc-WebUi.md), manifest-ui.md.

@@ -83,6 +83,35 @@ the SSE stream, any `step_cost` events it emits are buffered
 server-side and replayed as the first events when the SSE stream
 opens (R19).
 
+### Inside-out (Claude Code) mode
+A third run mode runs the LLM loop inside a Claude Code session
+local to the user. The existing Claude API and Ollama paths stay;
+CC mode is additive. All modes share `cache/`, prompt files, CDP
+tool wrappers, the UI, and the SSE event vocabulary; they differ
+only in who drives the loop.
+
+In CC mode the `bin/newsletter` CLI brokers between the running
+CC session and the server: `wait` long-polls for work, `next`
+emits the next phase's prompt (crank handle), `event` POSTs
+status, `fetch` / `search` / `render` proxy through to the
+server's CDP wrappers. The server gains six `/api/cc/*` endpoints
+that handle a single-slot work item, a single-slot elicitor-
+answer slot, presence tracking, fan-out of events to the same
+SSE channel API mode uses, and a per-call liveness/registration
+check that maps failures to exit codes 64 / 65 / 66.
+
+Cost telemetry is recovered by reading CC's own session and
+subagent JSONL files. Byte offsets persist in
+`cache/cost-offsets.json`; the top-level JSONL is filtered by
+tool-call signature (only turns whose `tool_use` blocks call
+`Bash(newsletter ...)` or `Agent(newsletter-*)` count as
+newsletter work). Per-agent labeling via subagent session
+correlation through a registry the skill writes.
+
+Two entry points: A. UI mode toggle (requires a CC session
+running with the skill loaded). B. `/newsletter` slash command
+from inside CC (web UI optional).
+
 ## Artifacts
 
 ### CRC Cards
@@ -96,6 +125,11 @@ opens (R19).
 - [x] crc-BrowserTools.md → `tools/browser.js`
 - [x] crc-HtmlRenderer.md → `htmlRenderer.js`
 - [x] crc-WebUi.md → `public/index.html`
+- [ ] crc-NewsletterCli.md → `bin/newsletter`
+- [ ] crc-CrankHandle.md → `lib/crank.js`, `lib/state.js`, `lib/schemas/`, `lib/parseClusters.js`, `lib/parseNewsletter.js`
+- [ ] crc-CostTracker.md → `bin/newsletter`, `lib/cost.js`
+- [ ] crc-NewsletterSkill.md → `.claude/skills/newsletter-pipeline/SKILL.md`, `.claude/skills/newsletter-pipeline/phases/`, `.claude/skills/newsletter-pipeline/schemas/`
+- [ ] crc-NewsletterSubagents.md → `.claude/agents/newsletter-elicitor.md`, `.claude/agents/newsletter-discovery.md`, `.claude/agents/newsletter-research.md`, `.claude/agents/newsletter-podcast.md`
 
 ### Sequences
 - [x] seq-fresh-run.md → `server.js`, `agents/discoveryAgent.js`, `agents/researchAgent.js`, `tools/browser.js`, `htmlRenderer.js`
@@ -105,6 +139,9 @@ opens (R19).
 - [x] seq-podcast.md → `server.js`, `agents/podcastAgent.js`, `lib/llm.js`
 - [x] seq-cache-load.md → `server.js`, `public/index.html`
 - [x] seq-bookmarklet-run.md → `server.js`, `public/index.html`, `tools/browser.js`
+- [ ] seq-cc-bootstrap.md → `server.js`, `bin/newsletter`, `.claude/skills/newsletter-pipeline/SKILL.md`
+- [ ] seq-cc-run.md → `server.js`, `bin/newsletter`, `lib/crank.js`, `.claude/skills/newsletter-pipeline/SKILL.md`, `.claude/agents/newsletter-discovery.md`, `.claude/agents/newsletter-research.md`
+- [ ] seq-cc-elicitor.md → `server.js`, `bin/newsletter`, `.claude/agents/newsletter-elicitor.md`
 
 ### UI Layouts
 - [x] ui-main.md → `public/index.html`

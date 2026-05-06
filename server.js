@@ -72,20 +72,50 @@ function resolveSettings(s) {
 
 const CHROME_PORT = parseInt(process.env.CHROME_DEBUG_PORT || '9222', 10);
 
-function findChromePath() {
-  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+// Returns { cmd, prefixArgs } describing how to spawn Chrome, or null.
+// The prefixArgs let us prepend e.g. `flatpak run --filesystem=... <appId>`
+// in front of the Chrome flags without leaking the launch shape to callers.
+function findChromeLauncher() {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+    return { cmd: process.env.CHROME_PATH, prefixArgs: [] };
+  }
   if (process.platform === 'win32') {
-    return [
+    const found = [
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
       path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe')
     ].find(p => fs.existsSync(p));
+    return found ? { cmd: found, prefixArgs: [] } : null;
   }
   if (process.platform === 'darwin') {
     const mac = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-    return fs.existsSync(mac) ? mac : null;
+    return fs.existsSync(mac) ? { cmd: mac, prefixArgs: [] } : null;
   }
-  return 'google-chrome';
+  // Linux: try native packages on PATH first, then Flatpak wrappers.
+  for (const name of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
+    const p = `/usr/bin/${name}`;
+    if (fs.existsSync(p)) return { cmd: p, prefixArgs: [] };
+  }
+  const flatpakWrappers = [
+    `${os.homedir()}/.local/share/flatpak/exports/bin/com.google.Chrome`,
+    '/var/lib/flatpak/exports/bin/com.google.Chrome',
+    `${os.homedir()}/.local/share/flatpak/exports/bin/org.chromium.Chromium`,
+    '/var/lib/flatpak/exports/bin/org.chromium.Chromium',
+  ];
+  for (const wrapper of flatpakWrappers) {
+    if (fs.existsSync(wrapper)) {
+      // Invoke `flatpak` directly so we can add --filesystem; the wrapper
+      // script doesn't pass that flag through. The project dir grant lets
+      // Chrome write the user-data-dir we point it at below.
+      return {
+        cmd: 'flatpak',
+        prefixArgs: ['run', `--filesystem=${__dirname}`, path.basename(wrapper)],
+      };
+    }
+  }
+  // Last resort: trust PATH (won't find anything we haven't already tried,
+  // but preserves the original "spawn google-chrome and see" behavior).
+  return { cmd: 'google-chrome', prefixArgs: [] };
 }
 
 function isChromeDebugRunning() {
@@ -105,21 +135,23 @@ async function launchChrome() {
     console.log(`Chrome already listening on debug port ${CHROME_PORT}`);
     return;
   }
-  const chromePath = findChromePath();
-  if (!chromePath) {
+  const launcher = findChromeLauncher();
+  if (!launcher) {
     console.warn(`Chrome binary not found — start it manually with --remote-debugging-port=${CHROME_PORT}`);
     return;
   }
   // Separate profile so debug mode works even when the user's regular Chrome is open.
   const userDataDir = path.join(__dirname, '.chrome-debug-profile');
-  const child = spawn(chromePath, [
+  const args = [
+    ...launcher.prefixArgs,
     `--remote-debugging-port=${CHROME_PORT}`,
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
-    '--no-default-browser-check'
-  ], { detached: true, stdio: 'ignore' });
+    '--no-default-browser-check',
+  ];
+  const child = spawn(launcher.cmd, args, { detached: true, stdio: 'ignore' });
   child.unref();
-  console.log(`Launched Chrome on debug port ${CHROME_PORT} (pid ${child.pid}, profile ${userDataDir})`);
+  console.log(`Launched Chrome on debug port ${CHROME_PORT} via ${launcher.cmd} (pid ${child.pid}, profile ${userDataDir})`);
 }
 
 function filterPageTabs(all) {
@@ -213,6 +245,355 @@ app.get('/api/ollama-models', async (req, res) => {
 // CRC: crc-Server.md | Seq: seq-bookmarklet-run.md | R139, R145, R148
 app.get('/api/tabs', async (req, res) => {
   res.json(await tabsForRequest(req));
+});
+
+// ─── CC mode (additive) ──────────────────────────────────────────────────────
+//
+// Single-CC-session contract: one session is registered at a time
+// (last-wins on connect). Every CLI subcommand sends `X-CC-Session`
+// so the server can reject stale callers post-takeover.
+
+// CRC: crc-Server.md | Seq: seq-cc-bootstrap.md, seq-cc-run.md | R151, R152, R190
+const _ccConn = {
+  sessionId: null,
+  targetWindow: null,
+  verbose: false,
+  lastActivityAt: 0,
+  waitConnections: 0,
+  currentRunId: null,
+  lastEventAt: 0,
+};
+let _ccPendingWork = null;
+const _ccWaitResolvers = [];
+const _ccRunHoldCallbacks = [];
+let _ccPendingAnswer = null;
+const _ccAnswerWaitResolvers = [];
+const _ccEventBuffer = [];
+const _ccStreamSubs = new Set();
+
+const CC_HEARTBEAT_TIMEOUT_MS  = 60_000;
+const CC_RECONNECT_WINDOW_MS   = 30_000;
+const CC_RUN_HOLD_TIMEOUT_MS   = 30_000;
+const CC_WAIT_LONG_POLL_MS     = 25_000;
+
+function _ccTouch() { _ccConn.lastActivityAt = Date.now(); }
+
+// CRC: crc-Server.md | R190
+function _ccPresence() {
+  const now = Date.now();
+  if (!_ccConn.sessionId) return 'not_connected';
+  if (_ccConn.currentRunId) {
+    // Either an `event` POST or any other /api/cc/* call counts as a
+    // heartbeat. Long discovery phases issue many `newsletter fetch`
+    // calls without `event` posts; we don't want those to look idle.
+    const lastSignal = Math.max(_ccConn.lastEventAt, _ccConn.lastActivityAt);
+    if (now - lastSignal > CC_HEARTBEAT_TIMEOUT_MS) {
+      _ccConn.currentRunId = null;
+      return now - _ccConn.lastActivityAt < CC_RECONNECT_WINDOW_MS ? 'reconnecting' : 'not_connected';
+    }
+    return 'running';
+  }
+  if (_ccConn.waitConnections > 0) return 'listening';
+  if (now - _ccConn.lastActivityAt < CC_RECONNECT_WINDOW_MS) return 'reconnecting';
+  return 'not_connected';
+}
+
+function _ccCheckSession(req, res) {
+  const callerSession = req.get('X-CC-Session');
+  if (!_ccConn.sessionId) {
+    res.status(409).json({ error: 'no session connected', code: 65 });
+    return false;
+  }
+  if (callerSession && callerSession !== _ccConn.sessionId) {
+    res.status(409).json({ error: 'session mismatch', code: 66 });
+    return false;
+  }
+  return true;
+}
+
+function _ccDispatchPendingWork() {
+  while (_ccPendingWork && _ccWaitResolvers.length) {
+    const resolver = _ccWaitResolvers.shift();
+    const work = _ccPendingWork;
+    _ccPendingWork = null;
+    resolver(work);
+    while (_ccRunHoldCallbacks.length) _ccRunHoldCallbacks.shift()(work);
+  }
+}
+
+function _ccBroadcastEvent(evt) {
+  for (const res of _ccStreamSubs) {
+    try { res.write(`data: ${JSON.stringify(evt)}\n\n`); } catch {}
+  }
+}
+
+// CRC: crc-Server.md | Seq: seq-cc-bootstrap.md | R156, R157, R158, R160, R189
+app.get('/api/cc/connection', (req, res) => {
+  // Every CLI invocation runs livenessCheck() → this endpoint, so each
+  // `newsletter <subcmd>` doubles as a heartbeat. Catches long phases
+  // (e.g. discovery's per-tab fetch loop) where the agent is busy but
+  // not emitting `event` posts.
+  if (_ccConn.sessionId && req.get('X-CC-Session') === _ccConn.sessionId) {
+    _ccTouch();
+  }
+  res.json({
+    sessionId:    _ccConn.sessionId,
+    targetWindow: _ccConn.targetWindow,
+    verbose:      _ccConn.verbose,
+    presence:     _ccPresence(),
+  });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-bootstrap.md | R158, R159
+app.post('/api/cc/connection', (req, res) => {
+  const { sessionId, targetWindow, verbose } = req.body || {};
+  if (typeof sessionId !== 'string' || !sessionId) {
+    return res.status(400).json({ error: 'missing sessionId' });
+  }
+  const previous = _ccConn.sessionId;
+  if (previous && previous !== sessionId) {
+    // Last-wins takeover: drop any parked /wait long-polls so the old CLI exits 66 promptly.
+    while (_ccWaitResolvers.length) _ccWaitResolvers.shift()({ takeover: true });
+    while (_ccAnswerWaitResolvers.length) _ccAnswerWaitResolvers.shift()({ takeover: true });
+    _ccPendingWork = null;
+    _ccConn.currentRunId = null;
+  }
+  _ccConn.sessionId    = sessionId;
+  _ccConn.targetWindow = targetWindow || null;
+  _ccConn.verbose      = !!verbose;
+  _ccTouch();
+  res.json({ ok: true, takeover: previous && previous !== sessionId });
+});
+
+// CRC: crc-Server.md | R160
+app.delete('/api/cc/connection', (req, res) => {
+  if (!_ccCheckSession(req, res)) return;
+  _ccConn.sessionId    = null;
+  _ccConn.targetWindow = null;
+  _ccConn.verbose      = false;
+  _ccConn.currentRunId = null;
+  _ccPendingWork = null;
+  while (_ccWaitResolvers.length) _ccWaitResolvers.shift()({ disconnected: true });
+  res.json({ ok: true });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-run.md | R184, R191, R192, R213, R216
+app.post('/api/cc/run', async (req, res) => {
+  const presence = _ccPresence();
+  if (presence === 'running') {
+    return res.status(409).json({ error: 'run in progress' });
+  }
+  if (presence === 'not_connected') {
+    return res.status(503).json({
+      error: 'cc_not_connected',
+      message: "Claude Code isn't connected. From a CC session in this project, run `/newsletter` (or `newsletter wait` if you've set up the skill). Then click Generate again.",
+    });
+  }
+  // Build the work item. Pull tabs scoped by ?nonce= when present (R213).
+  const { tabs } = await tabsForRequest(req);
+  const runId = `run-${Date.now().toString(36)}`;
+  const kind  = req.body?.kind || 'run';
+  const mode  = req.body?.mode || 'fresh';
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CACHE_DIR, 'run.json'), JSON.stringify({ runId, kind, mode, tabs }, null, 2));
+  _ccPendingWork = { runId, kind, mode, tabs };
+  _ccTouch();
+  if (presence === 'listening') {
+    _ccDispatchPendingWork();
+    return res.json({ ok: true, runId });
+  }
+  // reconnecting: hold up to RUN_HOLD_TIMEOUT_MS, then 503.
+  let settled = false;
+  const settle = (fn) => { if (!settled && !res.headersSent) { settled = true; fn(); } };
+  const onConsumed = (work) => settle(() => res.json({ ok: true, runId: work.runId }));
+  const timer = setTimeout(() => {
+    const idx = _ccRunHoldCallbacks.indexOf(onConsumed);
+    if (idx >= 0) _ccRunHoldCallbacks.splice(idx, 1);
+    if (_ccPendingWork?.runId === runId) _ccPendingWork = null;
+    settle(() => res.status(503).json({ error: 'cc_not_connected', held: true }));
+  }, CC_RUN_HOLD_TIMEOUT_MS);
+  _ccRunHoldCallbacks.push(onConsumed);
+  req.on('close', () => {
+    clearTimeout(timer);
+    const idx = _ccRunHoldCallbacks.indexOf(onConsumed);
+    if (idx >= 0) _ccRunHoldCallbacks.splice(idx, 1);
+  });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-run.md | R161, R162, R185
+app.get('/api/cc/wait', (req, res) => {
+  if (!_ccCheckSession(req, res)) return;
+  _ccConn.waitConnections += 1;
+  _ccTouch();
+  let settled = false;
+  const settle = (payload) => {
+    if (settled) return;
+    settled = true;
+    _ccConn.waitConnections = Math.max(0, _ccConn.waitConnections - 1);
+    if (payload?.takeover) {
+      res.status(409).json({ error: 'session mismatch', code: 66 });
+    } else if (payload?.disconnected) {
+      res.status(409).json({ error: 'no session connected', code: 65 });
+    } else if (payload) {
+      res.json(payload);
+    } else {
+      res.status(204).end();
+    }
+  };
+  _ccWaitResolvers.push(settle);
+  _ccDispatchPendingWork();
+  const timer = setTimeout(() => {
+    const idx = _ccWaitResolvers.indexOf(settle);
+    if (idx >= 0) _ccWaitResolvers.splice(idx, 1);
+    settle(null);
+  }, CC_WAIT_LONG_POLL_MS);
+  req.on('close', () => {
+    clearTimeout(timer);
+    const idx = _ccWaitResolvers.indexOf(settle);
+    if (idx >= 0) _ccWaitResolvers.splice(idx, 1);
+    if (!settled) {
+      settled = true;
+      _ccConn.waitConnections = Math.max(0, _ccConn.waitConnections - 1);
+    }
+  });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-run.md | R168, R169, R170, R180, R186
+app.post('/api/cc/event', (req, res) => {
+  if (!_ccCheckSession(req, res)) return;
+  const { type, data } = req.body || {};
+  if (typeof type !== 'string' || !type) {
+    return res.status(400).json({ error: 'missing event type' });
+  }
+  _ccConn.lastEventAt = Date.now();
+  _ccTouch();
+  if (type === 'run-started') _ccConn.currentRunId = data?.runId || _ccPendingWork?.runId || null;
+  if (type === 'run-finished') _ccConn.currentRunId = null;
+  const evt = { type, data: data ?? null };
+  if (_ccStreamSubs.size === 0) _ccEventBuffer.push(evt);
+  else _ccBroadcastEvent(evt);
+  res.json({ ok: true });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-elicitor.md | R172, R187
+app.post('/api/cc/answer', (req, res) => {
+  // Note: not session-checked — UI-side post; the CLI's await side is checked.
+  const payload = req.body || {};
+  _ccPendingAnswer = payload;
+  while (_ccAnswerWaitResolvers.length) {
+    _ccAnswerWaitResolvers.shift()(_ccPendingAnswer);
+  }
+  _ccPendingAnswer = null;
+  res.json({ ok: true });
+});
+
+// CRC: crc-Server.md | R188
+app.get('/api/cc/status', (req, res) => {
+  res.json({
+    presence:     _ccPresence(),
+    sessionId:    _ccConn.sessionId,
+    runId:        _ccConn.currentRunId,
+    waitOpen:     _ccConn.waitConnections,
+    lastEventAt:  _ccConn.lastEventAt,
+    lastActivity: _ccConn.lastActivityAt,
+  });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-run.md | R165
+app.post('/api/cc/fetch', async (req, res) => {
+  if (!_ccCheckSession(req, res)) return;
+  const { url, maxChars } = req.body || {};
+  if (typeof url !== 'string' || !url) {
+    return res.status(400).json({ error: 'missing url' });
+  }
+  try {
+    const { fetchPage } = await import('./tools/browser.js');
+    const text = await fetchPage(url, maxChars || 8000);
+    _ccTouch();
+    res.json({ url, text });
+  } catch (e) {
+    res.status(500).json({ url, error: e.message });
+  }
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-run.md | R166
+app.post('/api/cc/search', async (req, res) => {
+  if (!_ccCheckSession(req, res)) return;
+  const { query, maxResults } = req.body || {};
+  if (typeof query !== 'string' || !query) {
+    return res.status(400).json({ error: 'missing query' });
+  }
+  try {
+    const { webSearch } = await import('./tools/browser.js');
+    const results = await webSearch(query, maxResults || 8);
+    _ccTouch();
+    res.json({ query, results });
+  } catch (e) {
+    res.status(500).json({ query, error: e.message });
+  }
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-elicitor.md | R172
+app.get('/api/cc/await-answer', (req, res) => {
+  if (!_ccCheckSession(req, res)) return;
+  _ccTouch();
+  let settled = false;
+  const settle = (payload) => {
+    if (settled) return;
+    settled = true;
+    if (payload?.takeover) res.status(409).json({ error: 'session mismatch', code: 66 });
+    else if (payload === null) res.status(204).end();
+    else res.json(payload);
+  };
+  _ccAnswerWaitResolvers.push(settle);
+  // If an answer is already pending (rare), drain it now.
+  if (_ccPendingAnswer) {
+    const drained = _ccPendingAnswer;
+    _ccPendingAnswer = null;
+    while (_ccAnswerWaitResolvers.length) _ccAnswerWaitResolvers.shift()(drained);
+  }
+  const timer = setTimeout(() => {
+    const idx = _ccAnswerWaitResolvers.indexOf(settle);
+    if (idx >= 0) _ccAnswerWaitResolvers.splice(idx, 1);
+    settle(null);
+  }, CC_WAIT_LONG_POLL_MS);
+  req.on('close', () => {
+    clearTimeout(timer);
+    const idx = _ccAnswerWaitResolvers.indexOf(settle);
+    if (idx >= 0) _ccAnswerWaitResolvers.splice(idx, 1);
+  });
+});
+
+// CRC: crc-Server.md | Seq: seq-cc-run.md | R180, R195, R196
+app.get('/api/cc/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  for (const evt of _ccEventBuffer) {
+    res.write(`data: ${JSON.stringify(evt)}\n\n`);
+  }
+  _ccEventBuffer.length = 0;
+  _ccStreamSubs.add(res);
+  let lastPresence = _ccPresence();
+  // R195: SSE keepalive every 5s. R196: emit error on mid-run not_connected.
+  const tick = setInterval(() => {
+    try { res.write(`: keepalive\n\n`); } catch {}
+    const cur = _ccPresence();
+    if (lastPresence === 'running' && cur === 'not_connected') {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          data: { message: "Claude Code disconnected mid-run. The cache is in a partial state; click ↺ Clear & Redo to start fresh." }
+        })}\n\n`);
+      } catch {}
+    }
+    lastPresence = cur;
+  }, 5000);
+  req.on('close', () => {
+    clearInterval(tick);
+    _ccStreamSubs.delete(res);
+  });
 });
 
 // ─── Status ───────────────────────────────────────────────────────────────────

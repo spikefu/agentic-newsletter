@@ -2,8 +2,12 @@
   "name": "newsletter-agent",
   "version": "1.0.0",
   "type": "module",
+  "bin": {
+    "newsletter": "./bin/newsletter"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test lib/*.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
