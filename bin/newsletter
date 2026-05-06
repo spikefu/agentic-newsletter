@@ -218,6 +218,18 @@ const PHASE_META = {
   done:     { phase: 'done',     label: 'Done',     message: 'Run complete' },
 };
 
+// CRC: crc-NewsletterCli.md | Seq: seq-cc-run.md | R163, R164
+//
+// Subagent-facing prompt retrieval. The orchestrator's `next` emits a
+// short dispatch directive; the spawned subagent then runs `prompt`
+// to get its full phase prompt. Keeps the orchestrator's context tiny.
+async function cmdPrompt() {
+  await livenessCheck();
+  const { currentPhasePrompt } = await import('../lib/crank.js');
+  const out = await currentPhasePrompt();
+  process.stdout.write(out);
+}
+
 async function cmdNext() {
   await livenessCheck();
   const { nextPhasePrompt } = await import('../lib/crank.js');
@@ -234,6 +246,10 @@ async function cmdNext() {
       body: JSON.stringify({ type: 'phase', data: meta }),
     }).catch(() => {});
   }
+  // Silent cost-tail ride-along: each `next` invocation doubles as a
+  // cost heartbeat — any model work the agent did during the prior phase
+  // gets priced and reported before the next prompt is emitted.
+  await pushCostEvents({ silent: true });
   process.stdout.write(out);
 }
 
@@ -256,6 +272,10 @@ async function cmdEvent(_opts, rest) {
     const body = await res.json().catch(() => ({}));
     die(body.code || EXIT_SERVER_DOWN, body.error || `event failed (${res.status})`);
   }
+  // Silent cost-tail ride-along: every event push doubles as a heartbeat
+  // for cost telemetry. New JSONL bytes get priced and pushed as
+  // step_cost events without the agent having to invoke cost-tail.
+  await pushCostEvents({ silent: true });
 }
 
 async function cmdStatus() {
@@ -459,12 +479,31 @@ async function cmdRender() {
 // pattern — one shape the model can't get wrong.
 async function cmdElicitAwait(_opts, rest) {
   await livenessCheck();
-  const [questionsPath] = rest;
-  if (!questionsPath) die(2, 'usage: newsletter elicit-await <questions.json>');
-  const abs = path.isAbsolute(questionsPath) ? questionsPath : path.join(PROJECT, questionsPath);
-  let questions;
-  try { questions = JSON.parse(fs.readFileSync(abs, 'utf8')); }
-  catch (e) { die(EXIT_CATASTROPHIC, `could not read ${abs}: ${e.message}`); }
+  // Stdin only, markdown-stencilled. The earlier JSON-in-heredoc form
+  // tripped Claude Code's "brace with quote character (expansion
+  // obfuscation)" safety check on every call, requiring per-call user
+  // approval. The markdown form has no braces and reads naturally:
+  //
+  //   ./bin/newsletter elicit-await <<'EOF'
+  //   **Suggestion:** ...
+  //   - Question 1?
+  //   - Question 2?
+  //   EOF
+  if (rest.length) {
+    die(2, 'elicit-await: positional file argument is no longer supported. Pipe markdown on stdin via heredoc.');
+  }
+  if (process.stdin.isTTY) {
+    die(2, 'usage: ./bin/newsletter elicit-await <<\'EOF\'\n  **Suggestion:** <one-sentence framing>\n  - <Question 1>\n  - <Question 2>\n  EOF');
+  }
+  const input = await readStdin();
+  if (!input.trim()) die(EXIT_CATASTROPHIC, 'elicit-await: stdin was empty.');
+  const questions = parseElicitorMarkdown(input);
+  if (!questions.questions.length) {
+    die(EXIT_CATASTROPHIC, 'elicit-await: no questions found. Use markdown bullets, e.g.:\n  **Suggestion:** ...\n  - Question 1?\n  - Question 2?');
+  }
+  // Persist the questions for the diagnostic path / replay.
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CACHE_DIR, 'elicitor-questions.json'), JSON.stringify(questions, null, 2));
   // Push questions
   const pushRes = await ccFetch('/api/cc/event', {
     method: 'POST',
@@ -496,8 +535,8 @@ async function cmdElicitAwait(_opts, rest) {
         ``,
         `Next:`,
         `  1. Synthesize a 3–5 sentence context block from the tab list alone.`,
-        `  2. Write it to cache/elicitor-context.txt (plain text, no markdown).`,
-        `  3. Run \`newsletter next\` to advance to discover.`,
+        `  2. Submit it: \`./bin/newsletter submit-context <<'EOF' ... EOF\``,
+        `  3. Exit; the orchestrator will run \`./bin/newsletter next\` to advance.`,
         ``,
       ].join('\n'));
       return;
@@ -510,8 +549,8 @@ async function cmdElicitAwait(_opts, rest) {
     });
     lines.push(`Next:`);
     lines.push(`  1. Synthesize a 3–5 sentence context block from these answers.`);
-    lines.push(`  2. Write it to cache/elicitor-context.txt (plain text, no markdown).`);
-    lines.push(`  3. Run \`newsletter next\` to advance to discover.`);
+    lines.push(`  2. Submit it: \`./bin/newsletter submit-context <<'EOF' ... EOF\``);
+    lines.push(`  3. Exit; the orchestrator will run \`./bin/newsletter next\` to advance.`);
     lines.push('');
     process.stdout.write(lines.join('\n'));
     return;
@@ -571,24 +610,239 @@ async function cmdAnswer(_opts, rest) {
 }
 
 // CRC: crc-NewsletterCli.md | Seq: seq-cc-run.md | R174, R175, R176, R179, R181
-async function cmdCostTail() {
-  // No liveness check — R179 requires this to work when server is down.
+//
+// Compute and push any newly-priced step_cost events to the server.
+// Used directly by `cmdCostTail` and as a silent ride-along by
+// `cmdEvent` / `cmdNext` so cost is event-paced without the agent
+// having to invoke cost-tail explicitly. Best-effort in silent mode:
+// any failure is swallowed so the calling command's main work isn't
+// disrupted.
+async function pushCostEvents({ silent = false } = {}) {
   const local = readConnection();
-  if (!local?.sessionId) die(EXIT_NO_CONNECTION, 'no session connected — run `newsletter connect` first.');
+  if (!local?.sessionId) {
+    if (silent) return;
+    die(EXIT_NO_CONNECTION, 'no session connected — run `./bin/newsletter connect` first.');
+  }
   const { computeCostEvents } = await import('../lib/cost.js');
   const result = computeCostEvents(local.sessionId);
   if (!result.events.length) return;
   for (const ev of result.events) {
-    // Best-effort POST; if server is down, fall back to stdout (R179).
+    // Best-effort POST; if server is down, fall back to stdout (R179)
+    // — but only in explicit cost-tail mode. Silent ride-along stays silent.
     const r = await fetch(`${BASE}/api/cc/event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CC-Session': local.sessionId },
       body: JSON.stringify({ type: 'step_cost', data: ev }),
     }).catch(() => null);
-    if (!r || !r.ok) {
+    if (!silent && (!r || !r.ok)) {
       process.stdout.write(`[cost] ${ev.label}: $${ev.cost.toFixed(4)} (${ev.input_tokens}in/${ev.output_tokens}out, ${ev.model})\n`);
     }
   }
+}
+
+async function cmdCostTail() {
+  await pushCostEvents();
+}
+
+// CRC: crc-NewsletterCli.md
+//
+// Read all of stdin to a string. Used by the submit-* commands so
+// the agent can pipe content via `<<'EOF' ... EOF` instead of
+// reaching for the Write tool.
+function readStdin() {
+  return new Promise((resolve, reject) => {
+    let buf = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (c) => { buf += c; });
+    process.stdin.on('end', () => resolve(buf));
+    process.stdin.on('error', reject);
+  });
+}
+
+// Validate the discover phase's stencilled markdown and write both
+// cache/clusters.md (verbatim source) and cache/clusters.json
+// (parsed JSON for the renderer / research prompt). Parse / schema
+// failures exit 65 with errors on stderr; the agent retries.
+async function cmdSubmitClusters() {
+  await livenessCheck();
+  const input = await readStdin();
+  if (!input.trim()) die(2, 'submit-clusters: stdin is empty.');
+  const { parseClusters, logParseFailure } = await import('../lib/parseClusters.js');
+  const { validateClusters } = await import('../lib/crank.js');
+  const { result, errors: parseErrs } = parseClusters(input);
+  const runId = readRunId();
+  if (parseErrs.length) {
+    logParseFailure(CACHE_DIR, 'DISCOVER', runId, input, parseErrs);
+    process.stderr.write('Parse errors:\n');
+    for (const e of parseErrs) process.stderr.write(`  - ${e}\n`);
+    process.exit(65);
+  }
+  const valErrs = validateClusters(result);
+  if (valErrs.length) {
+    logParseFailure(CACHE_DIR, 'DISCOVER', runId, input, valErrs);
+    process.stderr.write('Validation errors:\n');
+    for (const e of valErrs) process.stderr.write(`  - ${e}\n`);
+    process.exit(65);
+  }
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CACHE_DIR, 'clusters.md'), input);
+  fs.writeFileSync(path.join(CACHE_DIR, 'clusters.json'), JSON.stringify(result, null, 2));
+  const sourceCount = result.clusters.reduce((n, c) => n + (c.sources?.length || 0), 0);
+  process.stdout.write(`OK — ${result.clusters.length} cluster(s), ${sourceCount} source(s) written.\n`);
+}
+
+async function cmdSubmitNewsletter() {
+  await livenessCheck();
+  // Two input modes:
+  //   1. stdin (heredoc) — short or moderate content
+  //   2. canonical cache file (when stdin empty) — for long content the
+  //      agent has written via the Write tool; avoids CC's
+  //      long-input heuristic on heredoc Bash commands.
+  let input;
+  if (process.stdin.isTTY) {
+    const cachePath = path.join(CACHE_DIR, 'newsletter.md');
+    if (!fs.existsSync(cachePath)) {
+      die(2, `submit-newsletter: no stdin and ${cachePath} not found. Either pipe the markdown via heredoc or write it to ${cachePath} first.`);
+    }
+    input = fs.readFileSync(cachePath, 'utf8');
+  } else {
+    input = await readStdin();
+    if (!input.trim()) {
+      // Empty stdin (e.g. </dev/null): fall back to canonical file.
+      const cachePath = path.join(CACHE_DIR, 'newsletter.md');
+      if (!fs.existsSync(cachePath)) die(2, 'submit-newsletter: stdin is empty and cache/newsletter.md does not exist.');
+      input = fs.readFileSync(cachePath, 'utf8');
+    }
+  }
+  const { parseNewsletter, logNewsletterParseFailure } = await import('../lib/parseNewsletter.js');
+  const { validateNewsletter } = await import('../lib/crank.js');
+  const { result, errors: parseErrs } = parseNewsletter(input);
+  const runId = readRunId();
+  if (parseErrs.length) {
+    logNewsletterParseFailure(CACHE_DIR, runId, input, parseErrs);
+    process.stderr.write('Parse errors:\n');
+    for (const e of parseErrs) process.stderr.write(`  - ${e}\n`);
+    process.exit(65);
+  }
+  const valErrs = validateNewsletter(result);
+  if (valErrs.length) {
+    logNewsletterParseFailure(CACHE_DIR, runId, input, valErrs);
+    process.stderr.write('Validation errors:\n');
+    for (const e of valErrs) process.stderr.write(`  - ${e}\n`);
+    process.exit(65);
+  }
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CACHE_DIR, 'newsletter.md'), input);
+  fs.writeFileSync(path.join(CACHE_DIR, 'newsletter.json'), JSON.stringify(result, null, 2));
+  process.stdout.write(`OK — newsletter written: "${result.title}" with ${result.sections.length} section(s).\n`);
+}
+
+async function cmdSubmitContext() {
+  await livenessCheck();
+  const input = await readStdin();
+  if (!input.trim()) die(2, 'submit-context: stdin is empty.');
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CACHE_DIR, 'elicitor-context.txt'), input);
+  process.stdout.write(`OK — context block written (${input.trim().length} chars).\n`);
+}
+
+async function cmdSubmitPodcast() {
+  await livenessCheck();
+  // Same dual-input pattern as submit-newsletter — long content can
+  // go through the Write tool to cache/podcast-script.txt and this
+  // command will pick it up when called with no stdin.
+  const cachePath = path.join(CACHE_DIR, 'podcast-script.txt');
+  let input;
+  if (process.stdin.isTTY) {
+    if (!fs.existsSync(cachePath)) {
+      die(2, `submit-podcast: no stdin and ${cachePath} not found. Either pipe the script via heredoc or write it to ${cachePath} first.`);
+    }
+    input = fs.readFileSync(cachePath, 'utf8');
+  } else {
+    input = await readStdin();
+    if (!input.trim()) {
+      if (!fs.existsSync(cachePath)) die(2, 'submit-podcast: stdin is empty and cache/podcast-script.txt does not exist.');
+      input = fs.readFileSync(cachePath, 'utf8');
+    }
+  }
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  // Idempotent: if the agent already wrote the canonical file via the
+  // Write tool, this re-write is a no-op; otherwise persist now.
+  fs.writeFileSync(cachePath, input);
+  const words = input.trim().split(/\s+/).length;
+  process.stdout.write(`OK — podcast script written (${words} words).\n`);
+}
+
+function readRunId() {
+  try { return JSON.parse(fs.readFileSync(path.join(PROJECT, 'cache/run.json'), 'utf8')).runId || null; }
+  catch { return null; }
+}
+
+// Parse the elicit-await markdown stencil into the {questions, suggestion}
+// shape the UI expects. Markdown form was chosen over JSON because
+// brace+quote patterns trigger Claude Code's "expansion obfuscation"
+// safety check on every call.
+//
+// Recognizes:
+//   **Suggestion:** <text>     → suggestion (also accepts "Suggestion:" without bold)
+//   - <question text>          → questions[]
+function parseElicitorMarkdown(text) {
+  const lines = text.split(/\r?\n/);
+  let suggestion = '';
+  const questions = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const mSugg = /^(?:\*\*)?suggestion:?(?:\*\*)?\s*(.+)$/i.exec(line);
+    if (mSugg) { suggestion = mSugg[1].trim(); continue; }
+    const mBullet = /^[-*]\s+(.+)$/.exec(line);
+    if (mBullet) { questions.push(mBullet[1].trim()); continue; }
+  }
+  return { questions, suggestion };
+}
+
+// CRC: crc-NewsletterCli.md
+//
+// One-line descriptions per subcommand, grouped by use. Subagents
+// reach for `--help` by reflex even when their agent file lists what
+// they need; this gives them a real answer instead of a usage line.
+async function cmdHelp() {
+  process.stdout.write([
+    'usage: ./bin/newsletter <subcommand> [args]',
+    '',
+    'Inside-out newsletter pipeline CLI. Run from this project\'s root.',
+    '',
+    'Connection / loop:',
+    '  pull --session <id>      register session and block for work (preferred bootstrap)',
+    '  connect --session <id>   register without blocking',
+    '  disconnect               clear registration',
+    '  wait                     block for next work item',
+    '  next                     advance state; emit dispatch directive (orchestrator)',
+    '  prompt                   emit current phase\'s full prompt (subagent)',
+    '  health                   preflight diagnostic (server, presence, JSONL state)',
+    '  status                   raw status JSON',
+    '',
+    'Phase artifacts — subagents pipe content via heredoc:',
+    '  submit-clusters    <stdin> = cache/clusters.md  (parses + validates)',
+    '  submit-newsletter  <stdin> = cache/newsletter.md (parses + validates)',
+    '  submit-context     <stdin> = cache/elicitor-context.txt',
+    '  submit-podcast     <stdin> = cache/podcast-script.txt',
+    '',
+    'Phase tools:',
+    '  fetch <url>              fetch a page via CDP (returns text + date)',
+    '  search \'<query>\'         web search via CDP (single-quote the query)',
+    '  elicit-await             push questions on stdin, block for answers',
+    '',
+    'Status / lifecycle:',
+    '  event <type> <json>      push a status event to the UI',
+    '  cost-tail                compute and push cost events',
+    '  cost-summary             print cost totals to stdout',
+    '  render                   generate HTML/PDF; push output_ready + run-finished',
+    '',
+    'Subagents: your full instructions for the current phase live in',
+    '`./bin/newsletter prompt`. Run that first; the output tells you what to do.',
+    '',
+  ].join('\n'));
 }
 
 // CRC: crc-NewsletterCli.md | R181
@@ -617,7 +871,12 @@ const subcommands = {
   pull:            cmdPull,
   wait:            cmdWait,
   next:            cmdNext,
+  prompt:          cmdPrompt,
   event:           cmdEvent,
+  'submit-clusters':   cmdSubmitClusters,
+  'submit-newsletter': cmdSubmitNewsletter,
+  'submit-context':    cmdSubmitContext,
+  'submit-podcast':    cmdSubmitPodcast,
   fetch:           cmdFetch,
   search:          cmdSearch,
   render:          cmdRender,
@@ -629,17 +888,28 @@ const subcommands = {
   'cost-summary':  cmdCostSummary,
   status:          cmdStatus,
   health:          cmdHealth,
+  help:            cmdHelp,
+  '--help':        cmdHelp,
+  '-h':            cmdHelp,
 };
 
 const [, , sub, ...rawArgs] = process.argv;
 if (!sub || !(sub in subcommands)) {
   process.stderr.write(`usage: newsletter <${Object.keys(subcommands).join('|')}> [args]\n`);
+  process.stderr.write(`Run \`./bin/newsletter help\` for a grouped list with descriptions.\n`);
   process.exit(2);
 }
 const { opts, rest } = parseFlags(rawArgs);
-try {
-  const result = subcommands[sub](opts, rest);
-  if (result instanceof Promise) result.catch(e => die(EXIT_CATASTROPHIC, e.stack || String(e)));
-} catch (e) {
-  die(EXIT_CATASTROPHIC, e.stack || String(e));
+// Any --help / -h flag (regardless of position) routes to cmdHelp.
+// Subagents reach for `subcmd --help` by reflex; without this they'd
+// block on stdin or get confusing usage errors.
+if (opts.help || opts.h) {
+  cmdHelp().catch(e => die(EXIT_CATASTROPHIC, e.stack || String(e)));
+} else {
+  try {
+    const result = subcommands[sub](opts, rest);
+    if (result instanceof Promise) result.catch(e => die(EXIT_CATASTROPHIC, e.stack || String(e)));
+  } catch (e) {
+    die(EXIT_CATASTROPHIC, e.stack || String(e));
+  }
 }

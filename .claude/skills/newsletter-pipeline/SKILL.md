@@ -85,23 +85,40 @@ When you receive a work item:
 
 1. Push **run-started**:
    ```bash
-   newsletter event run-started '{"runId":"<id>"}'
+   ./bin/newsletter event run-started '{"runId":"<id>"}'
    ```
-2. Call `newsletter next` to get the next phase's prompt. The
-   prompt tells you exactly what to do — don't try to remember
-   pipeline structure yourself; the CLI carries it.
-3. **Dispatch the phase to a subagent** via the Agent tool. The
-   subagent's name is `newsletter-discovery` for the discover
-   phase. Pass the prompt from step 2 as the subagent's input.
-4. When the subagent finishes (artifact written), loop back to
-   step 2: `newsletter next` checks the artifact, advances the
-   state machine, and returns either the next phase's prompt or
-   a "DONE" message.
-5. When `newsletter next` says DONE, push **run-finished**:
+2. Call `./bin/newsletter next` to get the next phase's prompt.
+   The CLI carries the pipeline structure; you don't have to
+   remember it.
+3. **Read the first line of `next`'s output.** If it starts with
+   `Run as: <subagent-name>`, dispatch that subagent via the
+   Agent tool. The CLI's directive is short by design — it tells
+   you which subagent to spawn and the single-line instruction to
+   give it (which is always: *"Run `./bin/newsletter prompt` and
+   follow what it tells you."*). The subagent fetches its full
+   phase prompt itself; you never carry the phase prompt in your
+   own context.
+   - Subagents you'll see: `newsletter-elicitor`,
+     `newsletter-discovery`, `newsletter-research`,
+     `newsletter-podcast`.
+   - Do NOT do the phase's work yourself when a `Run as:` line
+     is present. Inline orchestration looks faster but spends
+     orchestration tokens on work the per-phase subagent should
+     own — and the cost telemetry's per-phase breakdown
+     collapses into "Orchestration."
+4. If `next`'s output has no `Run as:` line, run its instructions
+   yourself. (Render and done fall into this case — they're
+   trivial CLI calls, not model work.)
+5. When the subagent finishes (artifact written) or you finish
+   the inline step, loop back to step 2: `./bin/newsletter next`
+   checks the artifact, advances the state machine, and returns
+   either the next phase's prompt or a DONE message.
+6. When `./bin/newsletter next` says DONE, push **run-finished**:
    ```bash
-   newsletter event run-finished '{"runId":"<id>"}'
+   ./bin/newsletter event run-finished '{"runId":"<id>"}'
    ```
-6. Loop back to `newsletter wait` for the next event.
+7. Loop back to `./bin/newsletter wait` (or `./bin/newsletter pull`)
+   for the next event.
 
 ## Event vocabulary
 

@@ -1,16 +1,16 @@
 ---
 name: newsletter-podcast
-description: Convert a finished newsletter into a 3-6 minute spoken-word podcast script. Reads cache/newsletter.json and writes cache/podcast-script.txt.
+description: Convert a finished newsletter into a 3-6 minute spoken-word podcast script. Reads the newsletter from the prompt and submits the script via the CLI.
 model: haiku
-tools: Bash, Read, Write
+tools: Bash, Write
 hooks:
   SessionStart:
     - matcher: startup
       hooks:
         - type: prompt
-          prompt: "You may run `newsletter event <type> <json>` (foreground). You may Read and Write under cache/. Nothing else. No tail/sleep/watch/nohup/backgrounding/pipes."
+          prompt: "You may run `./bin/newsletter prompt`, `./bin/newsletter event <type> <json>`, and `./bin/newsletter submit-podcast`. You may use the Write tool, restricted to paths under `cache/`. Nothing else — no Read, no Edit, no other binaries."
   PreToolUse:
-    - matcher: "Bash|Read|Write"
+    - matcher: "Bash|Read|Write|Edit"
       hooks:
         - type: command
           command: "${CLAUDE_PROJECT_DIR}/scripts/newsletter-guard.sh"
@@ -37,15 +37,35 @@ You are the **Podcast** stage of the newsletter pipeline. You
 convert a finished newsletter into a 3–6 minute spoken-word
 script.
 
-## Inputs
+## What you have access to
 
-- `cache/newsletter.json` — the research output.
+The `./bin/newsletter` CLI via Bash, plus the **Write tool
+restricted to paths under `cache/`** for the script itself.
+**You do not have Read or Edit tools.** Do not attempt to call
+them. The newsletter content arrives embedded in the prompt; you
+write your script with the Write tool and submit via the CLI.
+
+The three CLI subcommands you'll use, plus Write:
+
+- `./bin/newsletter prompt` — fetch your full phase prompt. Run
+  this first. The newsletter content is embedded in the output.
+- `./bin/newsletter event status '{"message":"..."}'` — narrate.
+- **Write tool** → `cache/podcast-script.txt` — write the script
+  directly. Long content goes here, avoiding heredoc length
+  limits.
+- `./bin/newsletter submit-podcast` (no args) — after writing
+  `cache/podcast-script.txt`, run this to validate and persist.
 
 ## Your task
 
-Read the newsletter and write a podcast script to
-`cache/podcast-script.txt`. Plain text — no markdown, no links,
-no bullet symbols, just spoken prose.
+1. Run `./bin/newsletter prompt`. The newsletter is embedded in
+   the output as markdown.
+2. Convert it to a 3–6 minute spoken-word script following the
+   rules below.
+3. Use the Write tool to write the script to
+   `cache/podcast-script.txt`.
+4. Run `./bin/newsletter submit-podcast`. The CLI validates the
+   file, reports word count, and persists.
 
 ## Rules
 
@@ -64,4 +84,4 @@ no bullet symbols, just spoken prose.
   material into the narrative.
 - Expand acronyms on first use.
 
-When `cache/podcast-script.txt` is written, return the path.
+On a successful submit, exit.

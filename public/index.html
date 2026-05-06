@@ -1828,7 +1828,13 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
   function updateCostCardRunning() {
     const card  = document.getElementById('costCard');
     const rows  = document.getElementById('costRows');
-    const total    = _elicitorCostRunning + _discCostRunning + _resCostRunning + _podcastCostRunning;
+    // Per-phase sum is the breakdown total. grandTotal carries the true
+    // running total (including Orchestration tokens, which don't fall
+    // into any per-phase bucket). Use grandTotal when available;
+    // fall back to the phase sum for older events that didn't carry
+    // running_total.
+    const phaseSum = _elicitorCostRunning + _discCostRunning + _resCostRunning + _podcastCostRunning;
+    const total    = grandTotal || phaseSum;
     const totTokIn  = _elicTokIn + _discTokIn + _resTokIn + _podTokIn;
     const totTokOut = _elicTokOut + _discTokOut + _resTokOut + _podTokOut;
     rows.innerHTML = `
