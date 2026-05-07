@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test lib/*.test.js"
+    "test": "node --test --test-reporter=spec \"lib/**/*.test.js\" \"tools/**/*.test.js\" \"server.test.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
