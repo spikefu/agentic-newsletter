@@ -304,3 +304,24 @@
 ### Server-down behavior for entry B
 
 - **R217:** When the server is unreachable, CLI subcommands that read/write only local state (`next` prompt emission, schema validation, `render`) operate locally. CLI subcommands that need the server (`wait`, `event`, `ask-elicitor`, `await-answers`, `connect`) exit 64.
+
+## Feature: paste-URLs (req-01)
+**Source:** specs/req-01-paste-urls.md
+
+- **R218:** A paste-to-open URLs card sits at the top of the main column in the web UI, above the Chrome Tabs panel. It contains a `<textarea>` (placeholder: one URL per line), a primary button labeled "Open in Chrome", and an inline status area for per-URL results.
+- **R219:** Clicking "Open in Chrome" POSTs the textarea contents to `POST /api/open-urls`. The button shows a loading state until the server responds.
+- **R220:** On response, the inline status area is replaced with one line per submitted URL: ✓ for `opened`, • for `already_open`, ✗ with reason for `invalid` and `failed`.
+- **R221:** After the response, the Chrome Tabs panel is automatically refreshed so newly opened tabs appear without the user clicking ↺ Refresh.
+- **R222:** The textarea is not cleared automatically after submission.
+- **R223:** Input parsing splits on `\r?\n`, trims each line, and ignores empty lines.
+- **R224:** A line is a valid URL iff `new URL(line)` succeeds and the resulting protocol is `http:` or `https:`; other lines are reported as `invalid`. No fuzzy extraction or auto-prepending of `https://`.
+- **R225:** Before opening, the server fetches the current tab list via `getChromeTabs()`. A submitted URL is a duplicate iff its exact string matches the `url` of any currently open tab; duplicates are not opened and are reported as `already_open` (no normalization of trailing slashes, query order, fragments, or case).
+- **R226:** Within-batch deduplication: if the same URL appears twice in the textarea it is opened at most once; subsequent occurrences are reported as `already_open`.
+- **R227:** `POST /api/open-urls` accepts `{ urls: string }`. Returns 400 with `{ error: "urls must be a string" }` for malformed body; 503 when Chrome is unreachable; 200 with `{ results: [...] }` otherwise. Per-URL failures are in-band (`status: "failed"`), not HTTP errors.
+- **R228:** Each result entry has `url` (original trimmed line), `status` (one of `opened`, `already_open`, `invalid`, `failed`), and an optional `reason` for `invalid` and `failed`.
+- **R229:** `results` preserves the order of non-empty input lines; each submitted line produces exactly one result entry.
+- **R230:** `failed` is produced when the CDP call rejects; `reason` is the trimmed error message capped at 200 chars. The endpoint never aborts the batch on a single failure.
+- **R231:** New tabs are opened via Chrome DevTools Protocol `CDP.New({ port, url })` against the project's `CHROME_DEBUG_PORT`. Opened tabs are left open after the endpoint returns and after any subsequent pipeline run.
+- **R232:** New tabs satisfy the existing `getChromeTabs()` filter (page type, http/https, non-localhost) and therefore show up in the Chrome Tabs panel after refresh; localhost URLs in the paste box still parse as valid and still get opened in Chrome — they simply don't appear in the panel because of the existing filter.
+- **R233:** `getChromeTabs()` is the single source of truth for "what tabs exist." The new endpoint reads from it for deduplication; the UI re-reads from `/api/tabs` after the new endpoint returns.
+- **R234:** The existing pipeline (`/api/stream`, Elicitor, Discovery, Research) is unchanged in behavior when no URLs are pasted.

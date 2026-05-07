@@ -1,5 +1,5 @@
 # WebUi
-**Requirements:** R115, R116, R117, R118, R119, R120, R121, R122, R123, R124, R125, R126, R127, R128, R129, R130, R131, R132, R133, R134, R135, R136, R137, R138, R139, R140, R141, R142, R143, R144, R145, R149, R151, R193, R194, R214, R215
+**Requirements:** R115, R116, R117, R118, R119, R120, R121, R122, R123, R124, R125, R126, R127, R128, R129, R130, R131, R132, R133, R134, R135, R136, R137, R138, R139, R140, R141, R142, R143, R144, R145, R149, R151, R193, R194, R214, R215, R218, R219, R220, R221, R222
 
 Single-page browser UI. The only entry point for the pipeline.
 Fetches tabs, sends the user's prompt to the elicitor, opens the
@@ -64,6 +64,14 @@ on-demand actions like Save and Podcast.
   not_connected, shows an onboarding modal explaining how to
   start a CC session and which command to run; the click does
   NOT enqueue (no one would pick it up)
+- Renders the Open URLs card at the top of the main column
+  (above the Chrome Tabs card): textarea + "Open in Chrome"
+  button + inline status area. On click, POSTs the raw
+  textarea contents to `/api/open-urls`, paints one ✓ / • / ✗
+  line per result entry into the status area, and re-runs
+  `loadTabs()` so newly opened tabs appear in the Chrome Tabs
+  panel (R218–R221). The textarea is left intact for retry
+  (R222)
 
 ## Collaborators
 - Server: every interaction goes through one of its endpoints
@@ -80,3 +88,4 @@ on-demand actions like Save and Podcast.
 - seq-cc-bootstrap.md
 - seq-cc-run.md
 - seq-cc-elicitor.md
+- seq-paste-urls.md

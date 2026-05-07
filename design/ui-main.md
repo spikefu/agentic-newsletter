@@ -1,5 +1,5 @@
 # UI: Main page layout
-**Requirements:** R115, R116, R117, R118, R119, R120, R122, R123, R125, R127, R128, R129, R140, R141
+**Requirements:** R115, R116, R117, R118, R119, R120, R122, R123, R125, R127, R128, R129, R140, R141, R218
 
 Single-page layout. Cards stack vertically inside a 1100px max
 content column. The Advanced toggle in the header reveals extra
@@ -9,6 +9,15 @@ panels.
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  📰 Newsletter Agent  [Claude API|Ollama|Claude Code] ●  $0.0000  ⚙ Advanced │  ← header (sticky)
 ├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─ 🔗 Open URLs in Chrome ─────────────────────────────────────────┐   │
+│  │  [textarea: paste URLs, one per line]                             │   │
+│  │  [Open in Chrome]   Opens each URL as a new tab. Existing tabs    │   │
+│  │                     are not duplicated.                            │   │
+│  │  ✓ https://example.com/article-1                                   │   │
+│  │  • https://example.com/already-open  — already open                │   │
+│  │  ✗ not-a-url  — not a valid http(s) URL                            │   │
+│  └────────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌─ 📂 Chrome Tabs · N tabs ──────────────────────  bookmarklet ▾  ↺ ┐  │
 │  │  • title (domain)                                                  │  │

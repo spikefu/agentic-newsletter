@@ -722,8 +722,7 @@
 </div>
 
 <main>
-  <!-- CRC: crc-WebUi.md | Seq: seq-bookmarklet-run.md | R119, R140, R141, R142, R143, R144 -->
-  <!-- Open URLs (req-01.1) -->
+  <!-- CRC: crc-WebUi.md | Seq: seq-paste-urls.md | R218, R219, R220, R221, R222 -->
   <div class="card" id="openUrlsCard">
     <div class="card-header">
       <span>🔗 Open URLs in Chrome</span>
@@ -739,7 +738,7 @@ https://example.com/article-2" style="min-height: 110px; border: 1px solid var(-
       <div id="openUrlsStatus" style="font-family: monospace; font-size: 0.74rem; line-height: 1.55; display: none"></div>
     </div>
   </div>
-  <!-- Chrome tabs -->
+  <!-- CRC: crc-WebUi.md | Seq: seq-bookmarklet-run.md | R119, R140, R141, R142, R143, R144 -->
   <div class="card" id="tabsCard">
     <div class="card-header">
       <span>📂 Chrome Tabs <span id="tabCountBadge" class="badge" style="margin-left:0.5rem">loading…</span></span>
@@ -1112,7 +1111,7 @@ Leave blank to use the default: direct, technically precise, link-rich."></texta
     }
   }
 
-  // ── Open URLs (req-01.1) ────────────────────────────────────────────────────
+  // CRC: crc-WebUi.md | Seq: seq-paste-urls.md | R219, R220, R221, R222
 
   async function openPastedUrls() {
     const input  = document.getElementById('openUrlsInput');

@@ -1,5 +1,5 @@
 # BrowserTools
-**Requirements:** R72, R73, R74, R75, R76, R77, R78, R79, R80, R81, R82, R83, R146, R147, R148
+**Requirements:** R72, R73, R74, R75, R76, R77, R78, R79, R80, R81, R82, R83, R146, R147, R148, R231, R232
 
 Chrome DevTools Protocol wrapper. Drives a single Chrome instance
 to list open tabs, fetch pages with date extraction, scrape
@@ -43,6 +43,11 @@ DuckDuckGo results, and print the rendered newsletter to PDF.
 - `printToPDF(url, outputPath)` — navigates, waits 800ms, calls
   `Page.printToPDF` with Letter dimensions and 0.6" margins,
   writes bytes to disk
+- `openTab(url)` — calls `CDP.New({ port, url })` against the debug
+  port, returns `{ id, url }` on success, rejects with the CDP
+  error message on failure. The new tab is left open for the
+  pipeline / user to consume; this function does not close it.
+  Used by the paste-URLs handler (R231)
 
 (The bookmarklet flow's per-target enumeration and URL-substring
 match — for finding the nonce target — runs from Server, which
@@ -56,3 +61,4 @@ calls live here.)
 ## Sequences
 - seq-fresh-run.md
 - seq-bookmarklet-run.md
+- seq-paste-urls.md

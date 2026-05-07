@@ -1,5 +1,5 @@
 # Server
-**Requirements:** R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R27, R55, R64, R71, R84, R85, R93, R1, R2, R139, R146, R147, R148, R149, R150, R151, R152, R184, R185, R186, R187, R188, R189, R190, R191, R192, R195, R196, R213, R216
+**Requirements:** R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R27, R55, R64, R71, R84, R85, R93, R1, R2, R139, R146, R147, R148, R149, R150, R151, R152, R184, R185, R186, R187, R188, R189, R190, R191, R192, R195, R196, R213, R216, R227, R233, R234
 
 The HTTP entry point. Hosts the web UI, exposes JSON endpoints,
 drives the SSE pipeline by calling the agent modules in order, and
@@ -50,6 +50,11 @@ Chrome on startup if one isn't already running.
   (`/api/save-dist`)
 - Auto-launches Chrome with the debug port enabled when no
   existing debug Chrome is found
+- Mounts the paste-URLs handler at `POST /api/open-urls` by
+  injecting `getChromeTabs` and BrowserTools' `openTab` into
+  `createOpenUrlsHandler`. The handler itself lives in OpenUrls;
+  Server only does the wiring. Existing pipeline endpoints are
+  untouched (R234)
 - (CC mode — additive, alongside the existing pipeline) Hosts six
   `/api/cc/*` endpoints — `run`, `wait`, `event`, `answer`,
   `status`, `connection`. Tracks one CC session at a time
@@ -71,9 +76,12 @@ Chrome on startup if one isn't already running.
 - DiscoveryAgent: phase 1 cluster creation
 - ResearchAgent: phase 2 newsletter writing
 - PodcastAgent: on-demand script generation
-- BrowserTools: tab listing, page fetch, web search, PDF print
+- BrowserTools: tab listing, page fetch, web search, PDF print,
+  paste-URLs tab opening
 - HtmlRenderer: convert newsletter JSON to standalone HTML
 - LlmProvider: provider/model identity for `model_info` events
+- OpenUrls: paste-URLs handler factory (mounted at
+  `POST /api/open-urls`)
 
 ## Sequences
 - seq-fresh-run.md
@@ -86,3 +94,4 @@ Chrome on startup if one isn't already running.
 - seq-cc-bootstrap.md
 - seq-cc-run.md
 - seq-cc-elicitor.md
+- seq-paste-urls.md

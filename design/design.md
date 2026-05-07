@@ -13,6 +13,13 @@ Each agent is a stateless module that drives a tool-call loop
 through the LlmProvider facade. The browser UI is the only entry
 point; it dispatches typed SSE events to live panels.
 
+A small auxiliary feature — paste-to-open URLs — gives the user
+a new way to populate the input set without leaving the UI: paste
+a list, click **Open in Chrome**, and the server opens each URL
+as a new tab via CDP. The pipeline itself is unchanged; it still
+reads "what tabs exist" from `getChromeTabs()` and processes them
+the same way regardless of how they were opened.
+
 ## Cross-cutting Concerns
 
 ### SSE event protocol
@@ -130,6 +137,7 @@ from inside CC (web UI optional).
 - [ ] crc-CostTracker.md → `bin/newsletter`, `lib/cost.js`
 - [ ] crc-NewsletterSkill.md → `.claude/skills/newsletter-pipeline/SKILL.md`, `.claude/skills/newsletter-pipeline/phases/`, `.claude/skills/newsletter-pipeline/schemas/`
 - [ ] crc-NewsletterSubagents.md → `.claude/agents/newsletter-elicitor.md`, `.claude/agents/newsletter-discovery.md`, `.claude/agents/newsletter-research.md`, `.claude/agents/newsletter-podcast.md`
+- [x] crc-OpenUrls.md → `lib/openUrls.js`, `lib/openUrlsHandler.js`
 
 ### Sequences
 - [x] seq-fresh-run.md → `server.js`, `agents/discoveryAgent.js`, `agents/researchAgent.js`, `tools/browser.js`, `htmlRenderer.js`
@@ -142,6 +150,7 @@ from inside CC (web UI optional).
 - [ ] seq-cc-bootstrap.md → `server.js`, `bin/newsletter`, `.claude/skills/newsletter-pipeline/SKILL.md`
 - [ ] seq-cc-run.md → `server.js`, `bin/newsletter`, `lib/crank.js`, `.claude/skills/newsletter-pipeline/SKILL.md`, `.claude/agents/newsletter-discovery.md`, `.claude/agents/newsletter-research.md`
 - [ ] seq-cc-elicitor.md → `server.js`, `bin/newsletter`, `.claude/agents/newsletter-elicitor.md`
+- [x] seq-paste-urls.md → `public/index.html`, `server.js`, `lib/openUrls.js`, `lib/openUrlsHandler.js`, `tools/browser.js`
 
 ### UI Layouts
 - [x] ui-main.md → `public/index.html`

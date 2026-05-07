@@ -679,7 +679,7 @@ app.get('/api/cc/stream', (req, res) => {
   })
 })
 
-// req-01.4: open pasted URLs as new tabs in the debug Chrome instance.
+// CRC: crc-Server.md | Seq: seq-paste-urls.md | R227, R233, R234
 app.post('/api/open-urls', createOpenUrlsHandler({ getChromeTabs, openTab }))
 
 // ─── Status ───────────────────────────────────────────────────────────────────
