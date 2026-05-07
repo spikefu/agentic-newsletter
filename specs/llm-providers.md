@@ -14,6 +14,14 @@ The `LLM_PROVIDER` environment variable selects the provider. Two
 values are supported: `claude` (default) and `ollama`. Once set,
 all agents use the same provider for the whole pipeline.
 
+A third LLM-driver mode — **Claude Code** — is selected by the
+user from the run-mode toggle in the web UI. In that mode the
+server does not call any LLM SDK; the loop runs inside a Claude
+Code session local to the user's machine. See `newsletter-cli.md`
+and `newsletter-skill.md` for the details of that path. From the
+provider abstraction's point of view, Claude Code mode is "no
+provider needed here" — the server's `chat()` is bypassed entirely.
+
 ## Default models
 
 Two models per provider — a "main" model used by Discovery,
@@ -92,3 +100,18 @@ object — first by parsing the whole string, then by extracting the
 first `{...}` block. Returns `null` on failure. Used by the
 Elicitor (which returns a strict JSON object) to be tolerant of
 local models that emit extra prose.
+
+## Shared prompts and pricing
+
+Both server-driven modes (Claude API, Ollama) and the Claude Code
+mode share the same system prompts. The server-driven modes read
+them from the existing `SYSTEM` constants in the agent modules;
+Claude Code mode imports the same exported strings via the CLI's
+crank-handle module. If the prompts ever fork, the two paths drift
+two newsletters apart — they stay one source.
+
+The per-model rate table in `agents/pricing.js` is the single
+source of truth for cost calculation. The server-side `chat()`
+uses it directly; the CLI's `cost-tail` imports it (does not
+duplicate it) so live cost tracking in CC mode prices the same way
+API mode does.

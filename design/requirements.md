@@ -23,6 +23,21 @@
 - **R18:** Elicitor-only events are `elicit_questions`, `elicit_ready`, `elicit_synthesized`.
 - **R19:** Elicitor events emitted before the SSE stream opens are buffered server-side and replayed as the first events when the stream connects.
 - **R20:** Any stage may abort the run by emitting an `error` event and closing the SSE stream; the cache is left in whatever partial state existed at the failure point.
+- **R180:** When the server is up but no SSE consumer is connected, events posted to `/api/cc/event` are buffered server-side via the existing `_elicitorBuffer` pattern (R19) until a consumer connects.
+- **R184:** `POST /api/cc/run` — UI hits this in Claude Code mode. Sets the single-slot pending work item. Returns 409 if the slot is already occupied (run in progress).
+- **R185:** `GET /api/cc/wait` — long-poll endpoint backing `newsletter wait`. Returns the pending work item when one becomes available; clears the slot.
+- **R186:** `POST /api/cc/event` — CC pushes status events; server fans out via SSE.
+- **R187:** `POST /api/cc/answer` — UI POSTs elicitor answers; unblocks `newsletter await-answers`.
+- **R188:** `GET /api/cc/status` — returns the current CC presence state.
+- **R189:** `GET /api/cc/connection` — returns liveness + the registered session id; used by the CLI's per-call check.
+- **R190:** Four CC presence states: **listening** (active long-poll, ready), **running** (slot consumed, run-started not yet run-finished), **reconnecting** (last activity < 30s, no current wait connection), **not_connected** (no wait, no activity > 30s).
+- **R192:** A second Generate click during a running pipeline is rejected with a 409 toast (cancellation policy v1; Cancel button is out of scope).
+- **R195:** Server emits SSE `keepalive` every 5s on `/api/stream`.
+- **R196:** If `cc-status` flips to `not_connected` while a run is in progress, server emits `error` on the stream: "Claude Code disconnected mid-run. The cache is in a partial state; click ↺ Clear & Redo to start fresh."
+- **R210:** `cache/state.json` holds the CLI state machine (current phase, run id, run config). Read/written by `newsletter next`.
+- **R211:** `cache/run.json` holds the run's tab list and config, populated by the server when receiving `POST /api/cc/run`. Read by phase prompts.
+- **R212:** `cache/cost-offsets.json` maps each tracked session id (top-level and subagent) to the byte offset already consumed.
+- **R216:** The lotto tube payload uses a `kind` discriminator with values: `run` (mode = fresh / phase2 / redo) and `podcast`. One tube, one discriminator — symmetric with the existing two-SSE-endpoint design but unified.
 
 ## Feature: elicitor
 **Source:** specs/elicitor.md
@@ -133,6 +148,10 @@
 - **R104:** Claude system prompts are sent with `cache_control: ephemeral` to enable prompt caching.
 - **R105:** When Claude thinking is enabled, the request asks for `adaptive` thinking.
 - **R106:** Claude cost is computed using a per-model rate table (input, output, cache-write, cache-read); unknown models cost 0.
+- **R151:** A new run mode — Claude Code mode — runs the LLM loop inside a Claude Code session local to the user. The existing Claude API and Ollama modes coexist unchanged.
+- **R152:** All modes share the same `cache/` layout, prompt files, CDP tool wrappers, UI, and SSE event vocabulary. Modes differ only in who drives the LLM loop.
+- **R153:** Both modes use the same system prompts. The Claude/Ollama mode reads them from the existing `SYSTEM` consts in `agents/*.js`; the CC mode imports the same exported strings via `lib/crank.js` (no duplication).
+- **R154:** The CLI imports `agents/pricing.js` directly. The Claude/Ollama path keeps its existing import; the CLI gains a second one. Single source of truth for per-model rates.
 
 ## Feature: html-renderer
 **Source:** specs/html-renderer.md
@@ -173,6 +192,11 @@
 - **R136:** Skip opens the SSE stream directly with the original context.
 - **R137:** The UI opens an SSE stream for Run/Research-only/Clear&Redo and dispatches each event type to the right panel.
 - **R138:** The Podcast button opens a separate SSE stream against the podcast generate endpoint.
+- **R191:** Click handling per state: listening → enqueue; running → 409 "run in progress"; reconnecting → enqueue and hold (next wait within 30s receives it; after 30s demote to not_connected and return 503); not_connected → reject with onboarding modal, do NOT enqueue.
+- **R193:** The UI polls `/api/cc/status` every 2–3s and paints a small header presence indicator.
+- **R194:** The onboarding modal shown for the not_connected case explains how to start a CC session and which command to run (`/newsletter` slash command or `newsletter wait`).
+- **R214:** The UI header gains a mode toggle — *Claude API · Ollama · Claude Code*. The first two hit `/api/stream` (existing). The third hits `/api/cc/run`.
+- **R215:** The mode-toggle setting persists in localStorage.
 
 ## Feature: bookmarklet
 **Source:** specs/bookmarklet.md
@@ -189,18 +213,10 @@
 - **R148:** The unscoped `GET /api/tabs` continues to serve the base any-window flow without regression.
 - **R149:** A bookmarklet-initiated run uses the same Generate button, SSE stream, and elicitor flow as the unscoped UI; only the tab list scope differs.
 - **R150:** If the nonce target is not found in CDP (closed early, CDP unreachable), `GET /api/tabs?nonce=<n>` falls back to the unscoped any-window list so the user lands in the normal flow.
+- **R213:** Bookmarklet window-scoping flows into CC mode: when `POST /api/cc/run` is invoked with a nonce, the server resolves the windowId via the existing CDP path (R146/R147) and seeds `cache/run.json` with the scoped tab list.
 
-## Feature: inside-out (Claude Code) mode
-**Source:** specs/migrations/inside-out-mode.md
-
-### The new mode
-
-- **R151:** A new run mode — Claude Code mode — runs the LLM loop inside a Claude Code session local to the user. The existing Claude API and Ollama modes coexist unchanged.
-- **R152:** All modes share the same `cache/` layout, prompt files, CDP tool wrappers, UI, and SSE event vocabulary. Modes differ only in who drives the LLM loop.
-- **R153:** Both modes use the same system prompts. The Claude/Ollama mode reads them from the existing `SYSTEM` consts in `agents/*.js`; the CC mode imports the same exported strings via `lib/crank.js` (no duplication).
-- **R154:** The CLI imports `agents/pricing.js` directly. The Claude/Ollama path keeps its existing import; the CLI gains a second one. Single source of truth for per-model rates.
-
-### CLI: bootstrap and liveness
+## Feature: newsletter-cli
+**Source:** specs/newsletter-cli.md
 
 - **R155:** A new `bin/newsletter` Node CLI is registered via `package.json` `"bin"` so `npm install` puts it on PATH.
 - **R156:** Every `newsletter <subcmd>` starts with a `GET /api/cc/connection` liveness check before doing other work.
@@ -208,65 +224,32 @@
 - **R158:** `newsletter connect --session <id>` registers `<id>` as the active CC session. A second `connect` from another session takes over (last-wins).
 - **R159:** `newsletter connect` accepts pile-on parameters (e.g., `--target-window <id>`, `--verbose`) so per-cycle subcommands stay terse.
 - **R160:** `newsletter disconnect` clears the registration. The server treats `wait` exit and inactivity > 30s as implicit disconnect.
-
-### CLI: lotto tube and crank handle
-
 - **R161:** `newsletter wait` long-polls `/api/cc/wait`. Blocks until a work item is available, returns one item as JSON, exits 0.
 - **R162:** `newsletter wait` absorbs infrastructure noise internally — server-side long-poll timeouts re-poll silently, mid-call disconnects during a server restart wait and reconnect. The caller only ever sees real events or catastrophic exits.
 - **R163:** `newsletter next` reads `cache/state.json`, decides which phase is next, prints a self-contained prompt to stdout, exits.
 - **R164:** `newsletter next` validates artifact schemas before advancing. A schema validation failure exits non-zero with the validation error; the phase is retried.
-
-### CLI: CDP-backed tools
-
 - **R165:** `newsletter fetch <url>` proxies to the server's existing CDP fetch wrapper. Returns text + extracted publication date.
 - **R166:** `newsletter search <query>` proxies to the server's CDP search wrapper.
 - **R167:** `newsletter render` generates HTML from `cache/newsletter.json`, prints to PDF, writes paths back. No model work.
-
-### CLI: status events and elicitor bridging
-
 - **R168:** `newsletter event <type> [args...]` POSTs to `/api/cc/event`, which fans out over SSE. Mirrors the existing event vocabulary plus run-lifecycle markers.
 - **R169:** The skill brackets each work item with `event run-started <run-id>` and `event run-finished <run-id>` so the server can track the `running` state precisely.
 - **R170:** While a run is in progress, events posted by the CC session double as heartbeats. No event for ~60s → server demotes `running → not_connected`.
 - **R171:** `newsletter ask-elicitor <questions.json>` pushes elicitor questions to the UI; returns immediately.
 - **R172:** `newsletter await-answers <run-id>` blocks until the UI POSTs answers (or sends an empty body = "skip"). Writes `cache/elicitor-qa.json`.
 - **R173:** `newsletter answer` is a test/CLI fallback that injects answers without the UI.
-
-### CLI: cost telemetry
-
 - **R174:** `newsletter cost-tail` reads byte offsets from `cache/cost-offsets.json`, scans each tracked JSONL from offset to EOF, prices new assistant lines via `agents/pricing.js`, writes new offsets back, and emits `step_cost` events.
 - **R175:** `cost-tail` is stateless and event-paced — the skill calls it after each `newsletter event` push. No long-running daemon, no idle polling.
 - **R176:** Subagent JSONLs are tracked unconditionally (100% newsletter work by construction).
 - **R177:** The top-level CC session's JSONL is filtered: a turn is included only if its `.message.content` has a `tool_use` block where (`name === "Bash"` AND `input.command` starts with `newsletter `) OR (`name === "Agent"` AND the spawned agent name starts with `newsletter-`).
 - **R178:** Per-agent labeling: subagent session ids correlate via mtime ordering and a small registry the skill writes mapping subagent-session → agent name. Cost events are labeled "Discovery · step N" / "Research · step N" etc.
 - **R179:** When the server is unreachable, `cost-tail` falls back to printing a one-line summary to stdout instead of POSTing.
-- **R180:** When the server is up but no SSE consumer is connected, events posted to `/api/cc/event` are buffered server-side via the existing `_elicitorBuffer` pattern (R19) until a consumer connects.
 - **R181:** `newsletter cost-summary` produces a one-shot total for the current run.
 - **R182:** A model not in `pricing.js` prices at 0 (graceful degradation, matches API-mode behavior).
 - **R183:** When CC is routed to Ollama, `cost-tail` detects missing/malformed usage fields and reports "n/a" without crashing.
+- **R217:** When the server is unreachable, CLI subcommands that read/write only local state (`next` prompt emission, schema validation, `render`) operate locally. CLI subcommands that need the server (`wait`, `event`, `ask-elicitor`, `await-answers`, `connect`) exit 64.
 
-### Server endpoints (additive)
-
-- **R184:** `POST /api/cc/run` — UI hits this in Claude Code mode. Sets the single-slot pending work item. Returns 409 if the slot is already occupied (run in progress).
-- **R185:** `GET /api/cc/wait` — long-poll endpoint backing `newsletter wait`. Returns the pending work item when one becomes available; clears the slot.
-- **R186:** `POST /api/cc/event` — CC pushes status events; server fans out via SSE.
-- **R187:** `POST /api/cc/answer` — UI POSTs elicitor answers; unblocks `newsletter await-answers`.
-- **R188:** `GET /api/cc/status` — returns the current CC presence state.
-- **R189:** `GET /api/cc/connection` — returns liveness + the registered session id; used by the CLI's per-call check.
-
-### CC presence and click handling
-
-- **R190:** Four CC presence states: **listening** (active long-poll, ready), **running** (slot consumed, run-started not yet run-finished), **reconnecting** (last activity < 30s, no current wait connection), **not_connected** (no wait, no activity > 30s).
-- **R191:** Click handling per state: listening → enqueue; running → 409 "run in progress"; reconnecting → enqueue and hold (next wait within 30s receives it; after 30s demote to not_connected and return 503); not_connected → reject with onboarding modal, do NOT enqueue.
-- **R192:** A second Generate click during a running pipeline is rejected with a 409 toast (cancellation policy v1; Cancel button is out of scope).
-- **R193:** The UI polls `/api/cc/status` every 2–3s and paints a small header presence indicator.
-- **R194:** The onboarding modal shown for the not_connected case explains how to start a CC session and which command to run (`/newsletter` slash command or `newsletter wait`).
-
-### Mid-run resilience
-
-- **R195:** Server emits SSE `keepalive` every 5s on `/api/stream`.
-- **R196:** If `cc-status` flips to `not_connected` while a run is in progress, server emits `error` on the stream: "Claude Code disconnected mid-run. The cache is in a partial state; click ↺ Clear & Redo to start fresh."
-
-### Skill and subagents
+## Feature: newsletter-skill
+**Source:** specs/newsletter-skill.md
 
 - **R197:** `.claude/skills/newsletter-pipeline/SKILL.md` declares frontmatter: `name`, `description`, `disable-model-invocation: true`, `allowed-tools: Bash(newsletter *)`. Body is ≤500 lines.
 - **R198:** SKILL.md body bootstraps: first run `newsletter connect --session ${CLAUDE_SESSION_ID}`, then loop on `newsletter wait` and dispatch each event.
@@ -276,34 +259,11 @@
 - **R202:** Default subagent model assignments (advisory — CC may route to a different model): newsletter-elicitor → Haiku, newsletter-discovery → Opus, newsletter-research → Opus, newsletter-podcast → Haiku.
 - **R203:** The crank-handle prompt for each phase becomes the prompt template the top-level session passes to the subagent via the Agent tool.
 - **R204:** A `/newsletter` slash command is the entry point for interactive use from inside a CC session. Boots a one-shot run.
-
-### Phase choreography
-
 - **R205:** **elicit** — read tabs + prior context; optionally ask 2–3 clarifying questions via `ask-elicitor` + `await-answers`; synthesize a 3–5 sentence context block to `cache/elicitor-context.txt`.
 - **R206:** **discover** — for every URL in the tab list run `newsletter fetch <url>`; group fetched content into 3–8 thematic clusters; write `cache/clusters.json` matching the schema.
 - **R207:** **research** — read `cache/clusters.json`; deepen 3–8 of the most interesting `notable_links` via `fetch`; use `newsletter search` for supplemental context; write `cache/newsletter.json` matching the schema.
 - **R208:** **render** — `newsletter render` (no model work).
 - **R209:** **podcast** — convert `cache/newsletter.json` to a 3–6 minute spoken-word script; write `cache/podcast-script.txt`.
-
-### Cache artifacts (CC-mode-specific)
-
-- **R210:** `cache/state.json` holds the CLI state machine (current phase, run id, run config). Read/written by `newsletter next`.
-- **R211:** `cache/run.json` holds the run's tab list and config, populated by the server when receiving `POST /api/cc/run`. Read by phase prompts.
-- **R212:** `cache/cost-offsets.json` maps each tracked session id (top-level and subagent) to the byte offset already consumed.
-- **R213:** Bookmarklet window-scoping flows into CC mode: when `POST /api/cc/run` is invoked with a nonce, the server resolves the windowId via the existing CDP path (R146/R147) and seeds `cache/run.json` with the scoped tab list.
-
-### UI changes
-
-- **R214:** The UI header gains a mode toggle — *Claude API · Ollama · Claude Code*. The first two hit `/api/stream` (existing). The third hits `/api/cc/run`.
-- **R215:** The mode-toggle setting persists in localStorage.
-
-### Lotto tube payload
-
-- **R216:** The lotto tube payload uses a `kind` discriminator with values: `run` (mode = fresh / phase2 / redo) and `podcast`. One tube, one discriminator — symmetric with the existing two-SSE-endpoint design but unified.
-
-### Server-down behavior for entry B
-
-- **R217:** When the server is unreachable, CLI subcommands that read/write only local state (`next` prompt emission, schema validation, `render`) operate locally. CLI subcommands that need the server (`wait`, `event`, `ask-elicitor`, `await-answers`, `connect`) exit 64.
 
 ## Feature: paste-URLs (req-01)
 **Source:** specs/req-01-paste-urls.md

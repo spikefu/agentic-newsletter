@@ -9,8 +9,10 @@ does not have a CLI runner.
 
 ## Page anatomy (top to bottom)
 
-1. **Header** — project name, provider/model badge (Advanced),
-   live cost ticker (Advanced), Advanced toggle.
+1. **Header** — project name, run-mode toggle (Claude API / Ollama
+   / Claude Code), CC presence indicator (only meaningful in CC
+   mode), provider/model badge (Advanced), live cost ticker
+   (Advanced), Advanced toggle.
 2. **Chrome Tabs** card — list of open tabs being processed, with a
    refresh control.
 3. **Run** card — two free-text prompt panes ("What were you
@@ -87,3 +89,50 @@ status text → activity feed; clusters → clusters card; newsletter
 
 The Podcast button opens a separate SSE stream against the podcast
 generate endpoint.
+
+## Run mode toggle
+
+A three-state toggle in the header — *Claude API · Ollama · Claude
+Code* — selects which LLM driver runs the pipeline. The setting
+persists in `localStorage` (key: `newsletterRunMode`).
+
+- **Claude API** and **Ollama** post to the existing `/api/stream`
+  endpoint and behave exactly as today.
+- **Claude Code** posts to `/api/cc/run` and listens on the same
+  SSE channel for events fanned out by the server.
+
+## CC presence indicator
+
+In Claude Code mode, a small indicator next to the toggle reflects
+the current presence of the connected Claude Code session:
+
+- **Green** — listening (a CC session is blocked on `wait`, ready
+  to take work).
+- **Spin** — running (CC took a work item and is processing).
+- **Gray** — not connected (no CC session, or it's been silent for
+  > 30s).
+
+The UI polls `/api/cc/status` every 2–3 seconds in CC mode to
+keep the indicator current.
+
+## Click handling per CC presence state
+
+When the user clicks Generate in Claude Code mode, the UI's
+behavior depends on the current presence state:
+
+- **listening** → enqueue the run; happy path.
+- **running** → toast: "run in progress." (Cancellation is out of
+  scope for v1.)
+- **reconnecting** → enqueue and hold. The next `wait` within 30s
+  receives it. After 30s, the state demotes to `not_connected`
+  and the UI shows a 503 toast.
+- **not_connected** → reject with an onboarding modal explaining
+  how to start a CC session and which command to run (`/newsletter`
+  slash command from inside CC, or `newsletter wait` if the user
+  has set up the skill manually). The click does NOT enqueue —
+  nothing would pick it up.
+
+The onboarding modal is the user's first surface for "Claude Code
+mode requires Claude Code running locally." It links the two
+entry points and explains why neither is automatic from the UI's
+side.

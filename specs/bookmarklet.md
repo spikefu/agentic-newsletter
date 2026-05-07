@@ -124,6 +124,17 @@ bookmarklet, just as it only acts on CDP after the user clicks
 Generate today. The feature surface is additive to the existing
 CDP usage; no new privileges are required.
 
+## Behavior in Claude Code mode
+
+Window scoping flows through to Claude Code mode unchanged. When
+the user clicks the bookmarklet and then picks **Claude Code** in
+the run-mode toggle (or vice versa), the UI's `POST /api/cc/run`
+includes the same nonce. The server resolves the source window via
+the existing CDP path and seeds the run's tab list with the
+window-scoped tabs before handing the work to the CC session.
+From the bookmarklet's point of view, the choice of LLM driver is
+invisible.
+
 ## Out of scope
 
 - Multi-window batch (run one newsletter per open Chrome window

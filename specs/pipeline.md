@@ -49,6 +49,10 @@ The pipeline supports three start modes from the UI:
 A separate **purge** action ("🗑") deletes every file in the cache
 directory unconditionally — used to start completely fresh.
 
+These same modes work in all three LLM-driver configurations —
+Claude API, Ollama, and Claude Code (see "Claude Code mode
+coordination" below).
+
 ## What the pipeline produces
 
 Each successful run writes a set of artifacts to the project's
@@ -112,3 +116,111 @@ meter and activity log complete from the user's perspective.
   HTML newsletter and a `status` event explaining the PDF skip.
 - A failed podcast generation only affects the podcast stream; the
   newsletter is unaffected.
+
+## Claude Code mode coordination
+
+When the user picks Claude Code as the run mode (third option in
+the header toggle), the LLM loop runs inside a Claude Code session
+on the user's machine instead of in the server's process. The
+server's role narrows: it coordinates between the UI and the CC
+session and fans events out over the existing SSE channel. All
+modes share the cache layout, prompt files, CDP tool wrappers, the
+UI, and the SSE event vocabulary; they differ only in who drives
+the loop.
+
+### `/api/cc/*` endpoints
+
+Six additive endpoints handle the CC bridge. They live alongside
+the existing pipeline endpoints — no existing route is modified.
+
+- **`POST /api/cc/run`** — UI hits this in Claude Code mode. Sets
+  the single-slot pending work item. Returns 409 if the slot is
+  already occupied (run in progress).
+- **`GET /api/cc/wait`** — long-poll endpoint that the CLI's
+  `newsletter wait` blocks on. Returns the pending work item when
+  one becomes available; clears the slot.
+- **`POST /api/cc/event`** — the CC session pushes status events;
+  the server fans them out via SSE on the same channel API mode
+  uses.
+- **`POST /api/cc/answer`** — UI POSTs elicitor answers; unblocks
+  the `newsletter await-answers` long-poll.
+- **`GET /api/cc/status`** — returns the current CC presence
+  state for the UI badge.
+- **`GET /api/cc/connection`** — returns liveness + the registered
+  session id; used by the CLI's per-call check.
+
+### Single-CC-session assumption
+
+One CC session is doing newsletter work at a time. `newsletter
+connect` registers it (last-wins on a second connect from a
+different session). All other subcommands read the registration
+implicitly so per-cycle invocations stay terse. `disconnect` is
+optional; the server treats `wait` exit and long absence as
+implicit disconnect.
+
+### Lotto tube
+
+The CC bridge uses a single-slot pending request, not a queue:
+
+- One slot for incoming work. POST sets it; the blocked `wait`
+  endpoint returns it and clears it.
+- A second POST while the slot is full returns 409 with a "run in
+  progress" toast. (Cancellation is out of scope for v1; a Cancel
+  button would deliver a third lotto channel.)
+- The Elicitor Q&A bridge has the same shape — a separate
+  single-slot pair, run-scoped and short-lived.
+
+The lotto tube payload uses a `kind` discriminator: `run` (with
+mode `fresh` / `phase2` / `redo`) or `podcast`. One tube, one
+discriminator — symmetric with the existing two-SSE-endpoint design
+but unified.
+
+### Presence states
+
+| State            | What's true                                  | Server knows because                            |
+|------------------|----------------------------------------------|-------------------------------------------------|
+| **listening**    | CC blocked on `wait`, ready                  | active long-poll connection                     |
+| **running**      | CC took a work item and is processing        | slot consumed; run-started not yet run-finished |
+| **reconnecting** | Brief gap between events                     | last activity < 30s, no wait connection         |
+| **not_connected**| Cold or gone for good                        | no wait, no activity for > 30s                  |
+
+The skill brackets each work item with `event run-started <run-id>`
+and `event run-finished <run-id>` so the server can track
+`running` precisely. While running, events posted by the CC
+session double as heartbeats. No event for ~60s → server demotes
+`running → not_connected`.
+
+### Mid-run resilience
+
+The server emits SSE `keepalive` every 5s on `/api/stream`. If
+`cc-status` flips to `not_connected` while a run is in progress,
+the server emits an `error` event on the stream:
+
+> "Claude Code disconnected mid-run. The cache is in a partial
+> state; click ↺ Clear & Redo to start fresh."
+
+### CC-mode cache artifacts
+
+CC mode writes a few extra files alongside the existing artifacts:
+
+- **`cache/state.json`** — the CLI's state machine (current phase,
+  run id, run config). Read and written by `newsletter next`.
+- **`cache/run.json`** — the run's tab list and config, populated
+  by the server when receiving `POST /api/cc/run`. Read by phase
+  prompts.
+- **`cache/cost-offsets.json`** — maps each tracked CC session id
+  (top-level and subagent) to the byte offset already consumed by
+  `cost-tail`.
+
+When `POST /api/cc/run` is invoked with `?nonce=`, the server
+resolves the source window via the existing bookmarklet CDP path
+and seeds `cache/run.json` with the window-scoped tab list — CC
+mode preserves bookmarklet scoping unchanged.
+
+### Outgoing event buffering
+
+The existing pre-stream buffering pattern (used for elicitor events
+that fire before the SSE opens) extends unchanged to CC-mode
+events: when the server is up but no SSE consumer is connected,
+events posted to `/api/cc/event` are buffered server-side and
+replayed when a consumer connects. No new mechanism.
