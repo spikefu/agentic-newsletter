@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Discovery clusters",
+  "description": "Thematic clustering output from the discover phase. Mirrors the submit_clusters tool-call shape from agents/discoveryAgent.js (single source of truth).",
+  "type": "object",
+  "required": ["clusters"],
+  "properties": {
+    "clusters": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "theme_summary", "sources"],
+        "properties": {
+          "id":            { "type": "string", "description": "Short slug, e.g. \"ai-reasoning\" or \"climate-policy\"" },
+          "title":         { "type": "string" },
+          "theme_summary": { "type": "string" },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["url", "page_title", "summary", "key_points"],
+              "properties": {
+                "url":            { "type": "string" },
+                "page_title":     { "type": "string" },
+                "published_date": { "type": ["string", "null"] },
+                "summary":        { "type": "string" },
+                "key_points":     { "type": "array", "items": { "type": "string" } },
+                "notable_links":  { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

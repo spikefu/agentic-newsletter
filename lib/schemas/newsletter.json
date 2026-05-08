@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Newsletter object",
+  "description": "Output of the research phase. Mirrors the write_newsletter tool-call shape from agents/researchAgent.js (single source of truth).",
+  "type": "object",
+  "required": ["title", "subtitle", "intro", "sections", "closing", "references"],
+  "properties": {
+    "title":    { "type": "string" },
+    "subtitle": { "type": "string" },
+    "intro":    { "type": "string" },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cluster_id", "headline", "body", "key_links"],
+        "properties": {
+          "cluster_id": { "type": "string" },
+          "headline":   { "type": "string" },
+          "body":       { "type": "string" },
+          "key_links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["text", "url"],
+              "properties": {
+                "text":           { "type": "string" },
+                "url":            { "type": "string" },
+                "published_date": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "closing":    { "type": "string" },
+    "references": { "type": "string" }
+  }
+}

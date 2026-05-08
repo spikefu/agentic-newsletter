@@ -3,6 +3,12 @@
 .env.local
 .env.*.local
 
+# Temp files
+*~
+.*~
+.\#*
+\#*
+
 # Dependencies
 node_modules/
 

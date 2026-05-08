@@ -1,7 +1,9 @@
+// CRC: crc-ResearchAgent.md | Seq: seq-fresh-run.md, seq-research-only.md
 import { chat, makeToolResultMessages, calcCost, MODEL, PROVIDER } from '../lib/llm.js';
 import { fetchPage, webSearch } from '../tools/browser.js';
 
-function buildSystem(researchPrompt) {
+// CRC: crc-ResearchAgent.md | R47, R48, R56, R57, R58, R59, R153
+export function buildSystem(researchPrompt) {
   const style = researchPrompt?.trim()
     ? researchPrompt.trim()
     : `Write for a technically sophisticated but time-pressed reader.
@@ -47,6 +49,7 @@ Temporal language — this is important:
 Call write_newsletter when your research is complete. Do not call it prematurely — make sure each section has enough substance first.`;
 }
 
+// CRC: crc-ResearchAgent.md | R49, R50, R51, R52, R53, R54
 const tools = [
   {
     name: 'fetch_page',
@@ -136,6 +139,7 @@ const tools = [
   }
 ];
 
+// CRC: crc-ResearchAgent.md | Seq: seq-fresh-run.md, seq-research-only.md | R47, R49, R50, R51, R55, R60, R61, R62
 export async function runResearchAgent(clusters, researchPrompt, send, settings = {}) {
   send('phase', { phase: 2, label: 'Research', message: `Researching ${clusters.length} clusters and writing newsletter... (${PROVIDER})` });
 

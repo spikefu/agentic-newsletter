@@ -1,9 +1,26 @@
+// CRC: crc-PodcastAgent.md | Seq: seq-podcast.md | R67
 import { chat, calcCost, MODEL } from '../lib/llm.js';
 
+// CRC: crc-PodcastAgent.md | R66
 function stripHtml(html) {
   return (html || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 }
 
+// CRC: crc-PodcastAgent.md | R153
+export const SYSTEM = `You are a podcast script writer. Convert a newsletter into a natural, engaging spoken-word script.
+
+Rules:
+- Write in first person plural ("Today we're looking at...", "What's interesting here is...", "Let's dig in...")
+- No markdown, no links, no bullet symbols — pure spoken prose
+- Spell out numbers when reading them helps ("twenty-five" not "25"), but keep years as numbers
+- Add natural transitions between sections ("Moving on to our next story...", "Shifting gears...")
+- Start with a warm 2–3 sentence intro welcoming the listener and teasing the topics
+- End with a brief sign-off ("That's it for today — thanks for listening")
+- 3–6 minutes at normal pace (~550–900 words)
+- Do not say "quote" or use quotation marks — rephrase quoted material into the narrative
+- Expand acronyms on first use`;
+
+// CRC: crc-PodcastAgent.md | Seq: seq-podcast.md | R63, R65, R66, R68, R69, R70
 export async function generatePodcastScript(newsletter, send = () => {}, settings = {}) {
   send('phase', { phase: 3, label: 'Podcast', message: 'Generating podcast script…' });
   send('status', { message: 'Writing podcast script…' });
@@ -21,21 +38,8 @@ export async function generatePodcastScript(newsletter, send = () => {}, setting
     newsletter.closing ? `Closing: ${stripHtml(newsletter.closing)}` : ''
   ].filter(Boolean).join('\n\n');
 
-  const system = `You are a podcast script writer. Convert a newsletter into a natural, engaging spoken-word script.
-
-Rules:
-- Write in first person plural ("Today we're looking at...", "What's interesting here is...", "Let's dig in...")
-- No markdown, no links, no bullet symbols — pure spoken prose
-- Spell out numbers when reading them helps ("twenty-five" not "25"), but keep years as numbers
-- Add natural transitions between sections ("Moving on to our next story...", "Shifting gears...")
-- Start with a warm 2–3 sentence intro welcoming the listener and teasing the topics
-- End with a brief sign-off ("That's it for today — thanks for listening")
-- 3–6 minutes at normal pace (~550–900 words)
-- Do not say "quote" or use quotation marks — rephrase quoted material into the narrative
-- Expand acronyms on first use`;
-
   const result = await chat({
-    system,
+    system:   SYSTEM,
     messages: [{ role: 'user', content: `Convert this newsletter content into a podcast script:\n\n${content}` }],
     model:    MODEL,
     thinking: false,

@@ -2,6 +2,9 @@
   "name": "newsletter-agent",
   "version": "1.0.0",
   "type": "module",
+  "bin": {
+    "newsletter": "./bin/newsletter"
+  },
   "scripts": {
     "start": "node server.js",
     "test": "node --test --test-reporter=spec \"lib/**/*.test.js\" \"tools/**/*.test.js\" \"server.test.js\""
